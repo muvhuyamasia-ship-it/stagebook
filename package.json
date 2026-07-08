@@ -1,0 +1,21 @@
+{
+  "name": "stagebook",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace @stagebook/api",
+    "dev:mobile": "npm run dev --workspace @stagebook/mobile",
+    "dev:web": "npm run dev --workspace @stagebook/web",
+    "dev:stagebook": "npm run dev --workspace @stagebook/stagebook-web",
+    "dev:stagebook-web": "npm run dev --workspace @stagebook/stagebook-web",
+    "build:web": "npm run build --workspace @stagebook/web",
+    "build:stagebook-web": "npm run build --workspace @stagebook/stagebook-web",
+    "test": "npm run test --workspace @stagebook/api",
+    "test:web": "npm run test --workspace @stagebook/web",
+    "typecheck": "npm run typecheck --workspace @stagebook/api && npm run typecheck --workspace @stagebook/mobile && npm run typecheck --workspace @stagebook/web && npm run typecheck --workspace @stagebook/stagebook-web"
+  }
+}
