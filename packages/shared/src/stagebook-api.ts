@@ -1,4 +1,14 @@
-import type { ArtistProfile, BookingRequest, BookingStatus, ChatMessage } from "./index";
+import type {
+  ArtistProfile,
+  BookingRequest,
+  BookingStatus,
+  ChatMessage,
+  ContractRecord,
+  PaymentSchedule,
+  PayfastCheckoutSession,
+  PayfastPaymentPhase,
+  SignatureMethod
+} from "./index";
 
 export class StagebookApiError extends Error {
   status: number;
@@ -118,7 +128,45 @@ export function createStagebookApi(config: StagebookApiConfig) {
       request<ChatMessage>(`/api/bookings/${bookingId}/chat`, {
         method: "POST",
         body: JSON.stringify(input)
-      })
+      }),
+
+    getContract: (bookingId: string) =>
+      request<ContractRecord>(`/api/bookings/${bookingId}/contracts`),
+
+    generateContract: (bookingId: string) =>
+      request<ContractRecord>(`/api/bookings/${bookingId}/contracts/generate`, {
+        method: "POST"
+      }),
+
+    requestContractRevision: (bookingId: string, feedback: string) =>
+      request<ContractRecord>(`/api/bookings/${bookingId}/contracts/revision`, {
+        method: "POST",
+        body: JSON.stringify({ feedback })
+      }),
+
+    signContract: (
+      bookingId: string,
+      input: { method: SignatureMethod; value: string }
+    ) =>
+      request<ContractRecord>(`/api/bookings/${bookingId}/contracts/sign`, {
+        method: "POST",
+        body: JSON.stringify(input)
+      }),
+
+    createPayfastCheckout: (bookingId: string, phase: PayfastPaymentPhase) =>
+      request<PayfastCheckoutSession>(`/api/bookings/${bookingId}/payments/checkout`, {
+        method: "POST",
+        body: JSON.stringify({ phase })
+      }),
+
+    completePayfastSandbox: (bookingId: string, phase: PayfastPaymentPhase) =>
+      request<{ booking: BookingRequest; paymentSchedule: PaymentSchedule }>(
+        `/api/bookings/${bookingId}/payments/sandbox/complete`,
+        {
+          method: "POST",
+          body: JSON.stringify({ phase })
+        }
+      )
   };
 }
 

@@ -4,9 +4,10 @@ import { Button } from "./Button";
 interface SignaturePadProps {
   label: string;
   onSave: (dataUrl: string) => void;
+  disabled?: boolean;
 }
 
-export function SignaturePad({ label, onSave }: SignaturePadProps) {
+export function SignaturePad({ label, onSave, disabled = false }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawing, setDrawing] = useState(false);
   const [hasInk, setHasInk] = useState(false);
@@ -34,6 +35,7 @@ export function SignaturePad({ label, onSave }: SignaturePadProps) {
   }
 
   function start(event: React.MouseEvent | React.TouchEvent) {
+    if (disabled) return;
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!ctx) return;
@@ -92,7 +94,7 @@ export function SignaturePad({ label, onSave }: SignaturePadProps) {
         <Button type="button" variant="ghost" onClick={clear}>
           Clear
         </Button>
-        <Button type="button" variant="secondary" onClick={save} disabled={!hasInk}>
+        <Button type="button" variant="secondary" onClick={save} disabled={!hasInk || disabled}>
           Save signature
         </Button>
       </div>

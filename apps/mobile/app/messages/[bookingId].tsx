@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { BOOKING_STATUS_LABEL } from "@stagebook/shared";
+import { BOOKING_STATUS_LABEL, STAGEBOOK_TIME_SLOTS } from "@stagebook/shared";
 import { LuxuryCard } from "../../src/components/LuxuryCard";
+import { ChatMessageBubble } from "../../src/components/ChatMessageBubble";
+import { useAuth } from "../../src/context/AuthContext";
 import { useStageBook } from "../../src/context/StageBookContext";
 import { theme } from "../../src/theme/theme";
 
 export default function MessageThreadScreen() {
   const { bookingId = "" } = useLocalSearchParams<{ bookingId: string }>();
   const router = useRouter();
+  const { session } = useAuth();
   const {
     getBooking,
     getArtist,
@@ -21,7 +24,9 @@ export default function MessageThreadScreen() {
     acceptCounterOffer,
     declineCounterOffer,
     acceptOffer,
-    markThreadRead
+    declineOffer,
+    markThreadRead,
+    refreshThread
   } = useStageBook();
 
   const booking = getBooking(bookingId);
@@ -30,11 +35,30 @@ export default function MessageThreadScreen() {
   const context = getBookingContext(bookingId);
   const pending = getPendingCounterOffer(bookingId);
   const [body, setBody] = useState("");
-  const [counter, setCounter] = useState(booking?.quotedPriceZar ?? 0);
+  const [counterPrice, setCounterPrice] = useState(String(booking?.quotedPriceZar ?? 0));
+  const [counterStart, setCounterStart] = useState(booking?.startTime ?? "18:00");
+  const [counterEnd, setCounterEnd] = useState(booking?.endTime ?? "20:00");
+  const [counterNote, setCounterNote] = useState("");
 
   useEffect(() => {
     markThreadRead(bookingId);
   }, [bookingId, messages.length, markThreadRead]);
+
+  useEffect(() => {
+    void refreshThread(bookingId);
+    const timer = setInterval(() => {
+      void refreshThread(bookingId);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [bookingId, refreshThread]);
+
+  useEffect(() => {
+    if (booking) {
+      setCounterPrice(String(booking.quotedPriceZar));
+      setCounterStart(booking.startTime);
+      setCounterEnd(booking.endTime);
+    }
+  }, [booking]);
 
   if (!booking) {
     return (
@@ -52,7 +76,9 @@ export default function MessageThreadScreen() {
 
       <LuxuryCard>
         <Text style={styles.title}>{artist?.stageName}</Text>
-        <Text style={styles.muted}>{booking.eventName} · {booking.eventDate}</Text>
+        <Text style={styles.muted}>
+          {booking.eventName} · {booking.eventDate}
+        </Text>
         <Text style={styles.status}>🟡 {BOOKING_STATUS_LABEL[booking.status]}</Text>
       </LuxuryCard>
 
@@ -68,23 +94,14 @@ export default function MessageThreadScreen() {
 
       <LuxuryCard>
         <Text style={styles.section}>Negotiation thread</Text>
-        {messages.map((msg) => {
-          const offer = msg.counterOfferId ? getCounterOffer(msg.counterOfferId) : undefined;
-          const isCounter = msg.messageType === "counter_offer" || msg.systemAction === "counter_offer";
-          return (
-            <View
-              key={msg.id}
-              style={[styles.bubble, isCounter && styles.bubbleCounter]}
-            >
-              <Text style={styles.bubbleText}>{msg.body}</Text>
-              {offer ? (
-                <Text style={styles.offerMeta}>
-                  {offer.proposedStartTime}–{offer.proposedEndTime}
-                </Text>
-              ) : null}
-            </View>
-          );
-        })}
+        {messages.map((msg) => (
+          <ChatMessageBubble
+            key={msg.id}
+            message={msg}
+            counterOffer={msg.counterOfferId ? getCounterOffer(msg.counterOfferId) : undefined}
+            isOwn={msg.senderUserId === session?.user.id}
+          />
+        ))}
         <TextInput
           style={styles.input}
           value={body}
@@ -92,20 +109,25 @@ export default function MessageThreadScreen() {
           placeholder="Type a secure message…"
           placeholderTextColor={theme.colors.textMuted}
         />
-        <Pressable style={styles.btn} onPress={() => { sendMessage(bookingId, body); setBody(""); }}>
+        <Pressable
+          style={styles.btn}
+          onPress={() => {
+            if (!body.trim()) return;
+            void sendMessage(bookingId, body.trim());
+            setBody("");
+          }}
+        >
           <Text style={styles.btnText}>Send</Text>
         </Pressable>
       </LuxuryCard>
 
       <LuxuryCard>
         <Text style={styles.section}>Transaction hub</Text>
-        <Text style={styles.muted}>Current: R{booking.quotedPriceZar.toLocaleString()}</Text>
-        <TextInput
-          style={styles.input}
-          keyboardType="numeric"
-          value={String(counter)}
-          onChangeText={(v) => setCounter(Number(v) || 0)}
-        />
+        <Text style={styles.muted}>Current: R{booking.quotedPriceZar.toLocaleString("en-ZA")}</Text>
+        <Text style={styles.muted}>
+          {booking.startTime} – {booking.endTime}
+        </Text>
+
         {pending ? (
           <View style={styles.row}>
             <Pressable style={styles.btn} onPress={() => acceptCounterOffer(pending.id)}>
@@ -116,14 +138,59 @@ export default function MessageThreadScreen() {
             </Pressable>
           </View>
         ) : null}
+
+        <TextInput
+          style={styles.input}
+          keyboardType="numeric"
+          value={counterPrice}
+          onChangeText={setCounterPrice}
+          placeholder="Counter amount (ZAR)"
+          placeholderTextColor={theme.colors.textMuted}
+        />
+        <View style={styles.slotRow}>
+          <Text style={styles.slotLabel}>Start</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {STAGEBOOK_TIME_SLOTS.map((slot) => (
+              <Pressable
+                key={`start-${slot}`}
+                style={[styles.chip, counterStart === slot && styles.chipActive]}
+                onPress={() => setCounterStart(slot)}
+              >
+                <Text style={styles.chipText}>{slot}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+        <View style={styles.slotRow}>
+          <Text style={styles.slotLabel}>End</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {STAGEBOOK_TIME_SLOTS.map((slot) => (
+              <Pressable
+                key={`end-${slot}`}
+                style={[styles.chip, counterEnd === slot && styles.chipActive]}
+                onPress={() => setCounterEnd(slot)}
+              >
+                <Text style={styles.chipText}>{slot}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+        <TextInput
+          style={styles.input}
+          value={counterNote}
+          onChangeText={setCounterNote}
+          placeholder="Counter note (optional)"
+          placeholderTextColor={theme.colors.textMuted}
+        />
         <View style={styles.row}>
           <Pressable
             style={styles.btnOutline}
             onPress={() =>
               sendCounterOffer(bookingId, {
-                priceZar: counter,
-                startTime: booking.startTime,
-                endTime: booking.endTime
+                priceZar: Number(counterPrice) || 0,
+                startTime: counterStart,
+                endTime: counterEnd,
+                note: counterNote || undefined
               })
             }
           >
@@ -133,6 +200,9 @@ export default function MessageThreadScreen() {
             <Text style={styles.btnText}>Accept offer</Text>
           </Pressable>
         </View>
+        <Pressable style={styles.btnGhost} onPress={() => declineOffer(bookingId)}>
+          <Text style={styles.btnGhostText}>Decline offer</Text>
+        </Pressable>
       </LuxuryCard>
     </ScrollView>
   );
@@ -140,28 +210,15 @@ export default function MessageThreadScreen() {
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: theme.colors.background },
-  content: { padding: 20, gap: 12, paddingTop: 56 },
+  content: { padding: 20, gap: 12, paddingBottom: 40, paddingTop: 56 },
   back: { color: theme.colors.gold, marginBottom: 8 },
   title: { color: theme.colors.textPrimary, fontSize: 24, fontWeight: "700" },
-  muted: { color: theme.colors.textMuted },
+  muted: { color: theme.colors.textMuted, marginTop: 4 },
   status: { color: theme.colors.warning, fontWeight: "700", marginTop: 6 },
   section: { color: theme.colors.gold, fontSize: 12, letterSpacing: 1.2, textTransform: "uppercase" },
   contextRow: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   contextLabel: { color: theme.colors.textMuted, fontSize: 11 },
   contextValue: { color: theme.colors.textPrimary, fontWeight: "600" },
-  bubble: {
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    marginBottom: 8
-  },
-  bubbleCounter: {
-    borderColor: theme.colors.borderGold,
-    backgroundColor: theme.colors.goldSoft
-  },
-  bubbleText: { color: theme.colors.textPrimary },
-  offerMeta: { color: theme.colors.textMuted, fontSize: 12, marginTop: 4 },
   input: {
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -175,7 +232,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 999,
     alignItems: "center",
-    marginTop: 8
+    marginTop: 8,
+    flex: 1
   },
   btnText: { color: "#1a1408", fontWeight: "700" },
   btnOutline: {
@@ -183,8 +241,23 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderGold,
     padding: 12,
     borderRadius: 999,
-    alignItems: "center"
+    alignItems: "center",
+    flex: 1
   },
   btnOutlineText: { color: theme.colors.gold, fontWeight: "600" },
-  row: { flexDirection: "row", gap: 8, marginTop: 8 }
+  btnGhost: { alignItems: "center", marginTop: 8 },
+  btnGhostText: { color: theme.colors.textMuted },
+  row: { flexDirection: "row", gap: 8, marginTop: 8 },
+  slotRow: { marginTop: 8, gap: 6 },
+  slotLabel: { color: theme.colors.textMuted, fontSize: 12 },
+  chip: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8
+  },
+  chipActive: { borderColor: theme.colors.gold, backgroundColor: theme.colors.goldSoft },
+  chipText: { color: theme.colors.textPrimary, fontSize: 12 }
 });

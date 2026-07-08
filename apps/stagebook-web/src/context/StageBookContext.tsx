@@ -1,6 +1,7 @@
 import {
-  MOCK_CONTRACTS,
   StagebookApiError,
+  type PayfastCheckoutSession,
+  type PayfastPaymentPhase,
   assessTravelGap,
   buildBookingContext,
   buildMessageThreads,
@@ -87,12 +88,17 @@ interface StageBookContextValue {
   declineCounterOffer: (offerId: string) => void;
   acceptOffer: (bookingId: string) => void;
   declineOffer: (bookingId: string) => void;
-  generateContract: (bookingId: string) => void;
-  signContract: (bookingId: string, role: "artist" | "client", signature: string) => void;
-  requestAmendment: (bookingId: string, feedback: string) => void;
+  generateContract: (bookingId: string) => Promise<void>;
+  signContract: (bookingId: string, signature: string) => Promise<void>;
+  requestAmendment: (bookingId: string, feedback: string) => Promise<void>;
+  loadContract: (bookingId: string) => Promise<void>;
   getPaymentSchedule: (bookingId: string) => PaymentSchedule | null;
-  payDeposit: (bookingId: string) => void;
-  confirmBalance: (bookingId: string) => void;
+  createPayfastCheckout: (
+    bookingId: string,
+    phase: PayfastPaymentPhase
+  ) => Promise<PayfastCheckoutSession | null>;
+  completePayfastPayment: (bookingId: string, phase: PayfastPaymentPhase) => Promise<void>;
+  refreshThread: (bookingId: string) => Promise<void>;
   cancelBooking: (bookingId: string) => void;
   markNotificationRead: (id: string) => void;
   unreadCount: number;
@@ -123,7 +129,7 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [readAtByBooking, setReadAtByBooking] = useState<Record<string, string>>({});
-  const [contracts, setContracts] = useState(MOCK_CONTRACTS);
+  const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [notifications, setNotifications] = useState<StageBookNotification[]>([
     {
       id: "seed-1",
@@ -153,6 +159,14 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
       setBookings(nextBookings);
       const chats = await Promise.all(nextBookings.map((booking) => stagebookApi.listChat(booking.id)));
       setChatMessages(chats.flat());
+      const contractResults = await Promise.allSettled(
+        nextBookings.map((booking) => stagebookApi.getContract(booking.id))
+      );
+      setContracts(
+        contractResults
+          .filter((result): result is PromiseFulfilledResult<ContractRecord> => result.status === "fulfilled")
+          .map((result) => result.value)
+      );
     } catch (error) {
       const message =
         error instanceof StagebookApiError ? error.message : "Unable to load bookings";
@@ -270,7 +284,8 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
       const dayBookings = bookings.filter(
         (b) => b.artistProfileId === artistId && b.eventDate === date && b.status !== "cancelled"
       );
-      if (dayBookings.length >= 3) return "booked";
+      const locked = dayBookings.some((b) => ["paid", "confirmed"].includes(b.status));
+      if (locked || dayBookings.length >= 3) return "booked";
       if (dayBookings.length > 0) return "partial";
       return "available";
     },
@@ -555,89 +570,90 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
     [session]
   );
 
+  const loadContract = useCallback(async (bookingId: string) => {
+    try {
+      const contract = await stagebookApi.getContract(bookingId);
+      setContracts((prev) => [...prev.filter((entry) => entry.bookingId !== bookingId), contract]);
+    } catch (error) {
+      if (error instanceof StagebookApiError && error.status === 404) return;
+      const message =
+        error instanceof StagebookApiError ? error.message : "Unable to load contract";
+      setDataError(message);
+    }
+  }, []);
+
   const generateContract = useCallback(
-    (bookingId: string) => {
-      const booking = bookings.find((b) => b.id === bookingId);
-      if (!booking) return;
-      const artist = artists.find((a) => a.id === booking.artistProfileId);
-      const weddingClause =
-        booking.eventType === "Wedding"
-          ? "\n\n## Wedding Liability Waiver\nSpecial event indemnity and venue coordination clauses apply."
-          : "";
-      const riderClause = booking.technicalRider
-        ? `\n\n## Technical Rider\n${booking.technicalRider}`
-        : "";
-
-      const contract: ContractRecord = {
-        id: `contract-${Date.now()}`,
-        bookingId,
-        status: "pending_signatures",
-        bodyMarkdown: `# Performance Agreement (Version 1)\n\n**Client Event:** ${booking.eventName}\n**Artist:** ${artist?.stageName}\n**Venue:** ${booking.locationLabel}\n**Date:** ${booking.eventDate}\n**Final Price:** R${booking.quotedPriceZar.toLocaleString()} ZAR${weddingClause}${riderClause}\n\n## Escrow\n30% deposit due at signing. Balance due 48h before performance.`,
-        pdfUrl: undefined
-      };
-
-      setContracts((prev) => [...prev.filter((c) => c.bookingId !== bookingId), contract]);
-      setNotifications((prev) =>
-        pushNotification(prev, {
-          type: "contract_signature",
-          title: "Contract ready for signature",
-          body: `${booking.eventName} agreement generated.`,
-          bookingId
-        })
-      );
+    async (bookingId: string) => {
+      try {
+        const contract = await stagebookApi.generateContract(bookingId);
+        setContracts((prev) => [...prev.filter((entry) => entry.bookingId !== bookingId), contract]);
+        setNotifications((prev) =>
+          pushNotification(prev, {
+            type: "contract_signature",
+            title: "Contract ready for signature",
+            body: "Performance agreement generated.",
+            bookingId
+          })
+        );
+      } catch (error) {
+        const message =
+          error instanceof StagebookApiError ? error.message : "Unable to generate contract";
+        setDataError(message);
+      }
     },
-    [artists, bookings]
+    []
   );
 
   const signContract = useCallback(
-    (bookingId: string, role: "artist" | "client", signature: string) => {
-      setContracts((prev) =>
-        prev.map((contract) => {
-          if (contract.bookingId !== bookingId) return contract;
-          const patch =
-            role === "artist"
-              ? {
-                  artistSignature: {
-                    signerUserId: session?.user.id ?? role,
-                    signerRole: session?.user.role ?? "artist",
-                    method: "draw" as const,
-                    value: signature,
-                    signedAt: new Date().toISOString()
-                  }
-                }
-              : {
-                  clientSignature: {
-                    signerUserId: session?.user.id ?? role,
-                    signerRole: "client" as const,
-                    method: "draw" as const,
-                    value: signature,
-                    signedAt: new Date().toISOString()
-                  }
-                };
-          const next = { ...contract, ...patch };
-          if (next.artistSignature && next.clientSignature) {
-            next.status = "signed";
-            next.pdfUrl = `/contracts/${bookingId}.pdf`;
-          }
-          return next;
-        })
-      );
+    async (bookingId: string, signature: string) => {
+      if (!session) return;
+      try {
+        const contract = await stagebookApi.signContract(bookingId, {
+          method: "draw",
+          value: signature
+        });
+        setContracts((prev) => prev.map((entry) => (entry.bookingId === bookingId ? contract : entry)));
+        if (contract.status === "signed") {
+          const message = await stagebookApi.sendChat(bookingId, {
+            body: "Contract fully executed by artist and client.",
+            systemAction: "contract"
+          });
+          setChatMessages((prev) => [...prev, message]);
+        }
+      } catch (error) {
+        const message =
+          error instanceof StagebookApiError ? error.message : "Unable to save signature";
+        setDataError(message);
+      }
     },
     [session]
   );
 
-  const requestAmendment = useCallback((bookingId: string, feedback: string) => {
-    setContracts((prev) =>
-      prev.map((contract) =>
-        contract.bookingId === bookingId
-          ? {
-              ...contract,
-              status: "revision_requested",
-              bodyMarkdown: `${contract.bodyMarkdown}\n\n---\n**Amendment Request (Version 2 - Edited):** ${feedback}`
-            }
-          : contract
-      )
-    );
+  const requestAmendment = useCallback(async (bookingId: string, feedback: string) => {
+    try {
+      const contract = await stagebookApi.requestContractRevision(bookingId, feedback);
+      setContracts((prev) => prev.map((entry) => (entry.bookingId === bookingId ? contract : entry)));
+    } catch (error) {
+      const message =
+        error instanceof StagebookApiError ? error.message : "Unable to request amendment";
+      setDataError(message);
+    }
+  }, []);
+
+  const refreshThread = useCallback(async (bookingId: string) => {
+    try {
+      const [messages, bookingList] = await Promise.all([
+        stagebookApi.listChat(bookingId),
+        stagebookApi.listMyBookings()
+      ]);
+      setChatMessages((prev) => [
+        ...prev.filter((message) => message.bookingId !== bookingId),
+        ...messages
+      ]);
+      setBookings(bookingList);
+    } catch {
+      // silent refresh for live thread polling
+    }
   }, []);
 
   const getPaymentSchedule = useCallback(
@@ -649,39 +665,48 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
     [bookings]
   );
 
-  const payDeposit = useCallback(
-    (bookingId: string) => {
-      updateBookingStatus(bookingId, "paid");
-      injectSystemTile(
-        bookingId,
-        "Payment confirmed: 30% escrow deposit captured. Calendar slot locked globally across StageBook.",
-        "payment"
-      );
-      setNotifications((prev) =>
-        pushNotification(prev, {
-          type: "payment_confirmed",
-          title: "Deposit confirmed",
-          body: "30% escrow deposit captured. Calendar slot locked globally.",
-          bookingId
-        })
-      );
+  const createPayfastCheckout = useCallback(
+    async (bookingId: string, phase: PayfastPaymentPhase) => {
+      if (!session) return null;
+      try {
+        return await stagebookApi.createPayfastCheckout(bookingId, phase);
+      } catch (error) {
+        const message =
+          error instanceof StagebookApiError ? error.message : "Unable to start PayFast checkout";
+        setDataError(message);
+        return null;
+      }
     },
-    [updateBookingStatus, injectSystemTile]
+    [session]
   );
 
-  const confirmBalance = useCallback(
-    (bookingId: string) => {
-      updateBookingStatus(bookingId, "confirmed");
-      setNotifications((prev) =>
-        pushNotification(prev, {
-          type: "payment_confirmed",
-          title: "Booking confirmed",
-          body: "Remaining 70% balance collected. Engagement fully confirmed.",
-          bookingId
-        })
-      );
+  const completePayfastPayment = useCallback(
+    async (bookingId: string, phase: PayfastPaymentPhase) => {
+      if (!session) return;
+      try {
+        const result = await stagebookApi.completePayfastSandbox(bookingId, phase);
+        setBookings((prev) =>
+          prev.map((entry) => (entry.id === bookingId ? result.booking : entry))
+        );
+        await refreshThread(bookingId);
+        setNotifications((prev) =>
+          pushNotification(prev, {
+            type: "payment_confirmed",
+            title: phase === "deposit" ? "Deposit confirmed" : "Booking confirmed",
+            body:
+              phase === "deposit"
+                ? "30% escrow deposit captured. Calendar slot locked globally."
+                : "Remaining 70% balance collected. Engagement fully confirmed.",
+            bookingId
+          })
+        );
+      } catch (error) {
+        const message =
+          error instanceof StagebookApiError ? error.message : "Unable to complete payment";
+        setDataError(message);
+      }
     },
-    [updateBookingStatus]
+    [session, refreshThread]
   );
 
   const cancelBooking = useCallback(
@@ -754,9 +779,11 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
       generateContract,
       signContract,
       requestAmendment,
+      loadContract,
       getPaymentSchedule,
-      payDeposit,
-      confirmBalance,
+      createPayfastCheckout,
+      completePayfastPayment,
+      refreshThread,
       cancelBooking,
       markNotificationRead,
       unreadCount
@@ -796,9 +823,11 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
       generateContract,
       signContract,
       requestAmendment,
+      loadContract,
       getPaymentSchedule,
-      payDeposit,
-      confirmBalance,
+      createPayfastCheckout,
+      completePayfastPayment,
+      refreshThread,
       cancelBooking,
       markNotificationRead,
       unreadCount

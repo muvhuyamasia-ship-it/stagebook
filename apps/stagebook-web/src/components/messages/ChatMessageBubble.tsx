@@ -50,6 +50,15 @@ export function ChatMessageBubble({ message, counterOffer, isOwn }: ChatMessageB
     );
   }
 
+  if (message.systemAction === "contract") {
+    return (
+      <div className="chat-tile chat-tile--notify">
+        <p className="chat-tile__eyebrow">Contract update</p>
+        <p>{message.body}</p>
+      </div>
+    );
+  }
+
   if (message.systemAction === "payment") {
     return (
       <div className="chat-tile chat-tile--success">

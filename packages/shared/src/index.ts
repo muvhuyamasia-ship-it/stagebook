@@ -254,3 +254,4 @@ export interface PasswordResetToken {
 export * from "./mock-catalog";
 export * from "./messaging";
 export * from "./stagebook-api";
+export * from "./payfast";

@@ -30,7 +30,8 @@ export function MessageThreadView({ bookingId, backLink = "/app/messages" }: Mes
     declineCounterOffer,
     acceptOffer,
     declineOffer,
-    markThreadRead
+    markThreadRead,
+    refreshThread
   } = useStageBook();
 
   const booking = getBooking(bookingId);
@@ -58,6 +59,14 @@ export function MessageThreadView({ bookingId, backLink = "/app/messages" }: Mes
     markThreadRead(bookingId);
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [bookingId, messages.length, markThreadRead]);
+
+  useEffect(() => {
+    void refreshThread(bookingId);
+    const timer = window.setInterval(() => {
+      void refreshThread(bookingId);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [bookingId, refreshThread]);
 
   if (!booking) {
     return <p>Conversation not found.</p>;

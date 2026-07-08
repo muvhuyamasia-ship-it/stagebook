@@ -1,29 +1,33 @@
+import type { PayfastPaymentPhase } from "@stagebook/shared";
 import { AppError } from "../../lib/errors";
 import { bookingService } from "../bookings/booking.service";
+import { payfastService } from "./payfast.service";
 
 export class PaymentService {
-  createCheckout(bookingId: string) {
-    const booking = bookingService.transitionStatus(bookingId, "agreement").booking;
-    const schedule = bookingService.buildPaymentSchedule(booking.quotedPriceZar, booking.eventDate);
-
-    return {
-      provider: "payfast",
-      checkoutReference: `stagebook_${bookingId}`,
-      escrowStatus: "authorized",
-      deposit: schedule.depositAmountZar,
-      balanceDueAt: schedule.balanceDueAt
-    };
+  createCheckout(bookingId: string, phase: PayfastPaymentPhase, baseUrl: string) {
+    const booking = bookingService.getById(bookingId);
+    if (phase === "deposit" && !["agreement", "paid", "confirmed"].includes(booking.status)) {
+      bookingService.transitionStatus(bookingId, "agreement");
+    }
+    return payfastService.createCheckout(bookingId, phase, baseUrl);
   }
 
-  markDepositPaid(bookingId: string) {
+  completeSandboxPayment(bookingId: string, phase: PayfastPaymentPhase) {
     if (!bookingId) {
       throw new AppError("Booking ID is required", 400);
     }
-    return bookingService.transitionStatus(bookingId, "paid");
+    if (phase === "deposit") {
+      return bookingService.transitionStatus(bookingId, "paid");
+    }
+    return bookingService.transitionStatus(bookingId, "confirmed");
+  }
+
+  markDepositPaid(bookingId: string) {
+    return this.completeSandboxPayment(bookingId, "deposit");
   }
 
   confirmBooking(bookingId: string) {
-    return bookingService.transitionStatus(bookingId, "confirmed");
+    return this.completeSandboxPayment(bookingId, "balance");
   }
 }
 

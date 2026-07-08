@@ -65,9 +65,12 @@ export class ContractService {
     return contract;
   }
 
-  requestRevision(bookingId: string) {
+  requestRevision(bookingId: string, feedback?: string) {
     const contract = this.getByBookingId(bookingId);
     contract.status = "revision_requested";
+    if (feedback?.trim()) {
+      contract.bodyMarkdown = `${contract.bodyMarkdown}\n\n---\n**Amendment Request:** ${feedback.trim()}`;
+    }
     return contract;
   }
 

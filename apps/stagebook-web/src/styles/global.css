@@ -1944,6 +1944,62 @@ ol {
   font-size: 14px;
 }
 
+.payfast-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.payfast-modal {
+  width: min(520px, 100%);
+}
+
+.payfast-modal__eyebrow {
+  color: var(--sb-gold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.payfast-modal__title {
+  margin: 8px 0 0;
+}
+
+.payfast-modal__meta {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.payfast-modal__meta dt {
+  color: var(--sb-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.payfast-modal__meta dd {
+  margin: 2px 0 0;
+}
+
+.signature-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.signature-preview {
+  margin-top: 8px;
+  max-width: 220px;
+  border-radius: 8px;
+  border: 1px solid var(--sb-border-gold);
+  background: #0f0f0f;
+}
+
 .text-success {
   color: var(--sb-green);
 }

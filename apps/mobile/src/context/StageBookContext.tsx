@@ -2,6 +2,7 @@ import {
   StagebookApiError,
   buildBookingContext,
   buildMessageThreads,
+  buildPaymentSchedule,
   deriveCounterOffersFromChat,
   formatCounterOfferBody,
   type BookingContextItem,
@@ -13,7 +14,11 @@ import {
   DEFAULT_DISCOVERY_FILTERS,
   type BookingRequest,
   type ChatMessage,
-  type ArtistProfile
+  type ArtistProfile,
+  type ContractRecord,
+  type PaymentSchedule,
+  type PayfastCheckoutSession,
+  type PayfastPaymentPhase
 } from "@stagebook/shared";
 import {
   createContext,
@@ -57,6 +62,19 @@ interface StageBookContextValue {
   declineCounterOffer: (offerId: string) => Promise<void>;
   acceptOffer: (bookingId: string) => Promise<void>;
   declineOffer: (bookingId: string) => Promise<void>;
+  refreshThread: (bookingId: string) => Promise<void>;
+  contracts: ContractRecord[];
+  getContract: (bookingId: string) => ContractRecord | undefined;
+  loadContract: (bookingId: string) => Promise<void>;
+  generateContract: (bookingId: string) => Promise<void>;
+  signContract: (bookingId: string, signature: string) => Promise<void>;
+  requestAmendment: (bookingId: string, feedback: string) => Promise<void>;
+  getPaymentSchedule: (bookingId: string) => PaymentSchedule | null;
+  createPayfastCheckout: (
+    bookingId: string,
+    phase: PayfastPaymentPhase
+  ) => Promise<PayfastCheckoutSession | null>;
+  completePayfastPayment: (bookingId: string, phase: PayfastPaymentPhase) => Promise<void>;
 }
 
 const StageBookContext = createContext<StageBookContextValue | null>(null);
@@ -69,6 +87,7 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
   const [readAtByBooking, setReadAtByBooking] = useState<Record<string, string>>({});
   const [notifications] = useState<StageBookNotification[]>([]);
   const [filters, setFiltersState] = useState(DEFAULT_DISCOVERY_FILTERS);
+  const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
 
@@ -88,6 +107,14 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
       setBookings(nextBookings);
       const chats = await Promise.all(nextBookings.map((booking) => stagebookApi.listChat(booking.id)));
       setChatMessages(chats.flat());
+      const contractResults = await Promise.allSettled(
+        nextBookings.map((booking) => stagebookApi.getContract(booking.id))
+      );
+      setContracts(
+        contractResults
+          .filter((result): result is PromiseFulfilledResult<ContractRecord> => result.status === "fulfilled")
+          .map((result) => result.value)
+      );
     } catch (error) {
       const message =
         error instanceof StagebookApiError ? error.message : "Unable to load bookings";
@@ -325,6 +352,119 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
     [session]
   );
 
+  const refreshThread = useCallback(async (bookingId: string) => {
+    try {
+      const [messages, bookingList] = await Promise.all([
+        stagebookApi.listChat(bookingId),
+        stagebookApi.listMyBookings()
+      ]);
+      setChatMessages((prev) => [
+        ...prev.filter((message) => message.bookingId !== bookingId),
+        ...messages
+      ]);
+      setBookings(bookingList);
+    } catch {
+      // silent polling refresh
+    }
+  }, []);
+
+  const getContract = (bookingId: string) => contracts.find((entry) => entry.bookingId === bookingId);
+
+  const loadContract = useCallback(async (bookingId: string) => {
+    try {
+      const contract = await stagebookApi.getContract(bookingId);
+      setContracts((prev) => [...prev.filter((entry) => entry.bookingId !== bookingId), contract]);
+    } catch (error) {
+      if (error instanceof StagebookApiError && error.status === 404) return;
+    }
+  }, []);
+
+  const generateContract = useCallback(async (bookingId: string) => {
+    try {
+      const contract = await stagebookApi.generateContract(bookingId);
+      setContracts((prev) => [...prev.filter((entry) => entry.bookingId !== bookingId), contract]);
+    } catch (error) {
+      const message =
+        error instanceof StagebookApiError ? error.message : "Unable to generate contract";
+      setDataError(message);
+    }
+  }, []);
+
+  const signContract = useCallback(
+    async (bookingId: string, signature: string) => {
+      if (!session) return;
+      try {
+        const contract = await stagebookApi.signContract(bookingId, { method: "draw", value: signature });
+        setContracts((prev) => prev.map((entry) => (entry.bookingId === bookingId ? contract : entry)));
+        if (contract.status === "signed") {
+          const message = await stagebookApi.sendChat(bookingId, {
+            body: "Contract fully executed by artist and client.",
+            systemAction: "contract"
+          });
+          setChatMessages((prev) => [...prev, message]);
+        }
+      } catch (error) {
+        const message =
+          error instanceof StagebookApiError ? error.message : "Unable to save signature";
+        setDataError(message);
+      }
+    },
+    [session]
+  );
+
+  const requestAmendment = useCallback(async (bookingId: string, feedback: string) => {
+    try {
+      const contract = await stagebookApi.requestContractRevision(bookingId, feedback);
+      setContracts((prev) => prev.map((entry) => (entry.bookingId === bookingId ? contract : entry)));
+    } catch (error) {
+      const message =
+        error instanceof StagebookApiError ? error.message : "Unable to request amendment";
+      setDataError(message);
+    }
+  }, []);
+
+  const getPaymentSchedule = useCallback(
+    (bookingId: string) => {
+      const booking = bookings.find((entry) => entry.id === bookingId);
+      if (!booking) return null;
+      return buildPaymentSchedule(booking.quotedPriceZar, booking.eventDate);
+    },
+    [bookings]
+  );
+
+  const createPayfastCheckout = useCallback(
+    async (bookingId: string, phase: PayfastPaymentPhase) => {
+      if (!session) return null;
+      try {
+        return await stagebookApi.createPayfastCheckout(bookingId, phase);
+      } catch (error) {
+        const message =
+          error instanceof StagebookApiError ? error.message : "Unable to start PayFast checkout";
+        setDataError(message);
+        return null;
+      }
+    },
+    [session]
+  );
+
+  const completePayfastPayment = useCallback(
+    async (bookingId: string, phase: PayfastPaymentPhase) => {
+      if (!session) return;
+      try {
+        const result = await stagebookApi.completePayfastSandbox(bookingId, phase);
+        setBookings((prev) =>
+          prev.map((entry) => (entry.id === bookingId ? result.booking : entry))
+        );
+        await refreshThread(bookingId);
+      } catch (error) {
+        const message =
+          error instanceof StagebookApiError ? error.message : "Unable to complete payment";
+        setDataError(message);
+      }
+    },
+    [session, refreshThread]
+  );
+
   return (
     <StageBookContext.Provider
       value={{
@@ -353,7 +493,17 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
         acceptCounterOffer,
         declineCounterOffer,
         acceptOffer,
-        declineOffer
+        declineOffer,
+        refreshThread,
+        contracts,
+        getContract,
+        loadContract,
+        generateContract,
+        signContract,
+        requestAmendment,
+        getPaymentSchedule,
+        createPayfastCheckout,
+        completePayfastPayment
       }}
     >
       {children}

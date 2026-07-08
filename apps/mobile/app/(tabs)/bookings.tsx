@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Link } from "expo-router";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { BOOKING_STATUS_LABEL, formatZar } from "@stagebook/shared";
 import { LuxuryCard } from "../../src/components/LuxuryCard";
 import { useStageBook } from "../../src/context/StageBookContext";
@@ -18,13 +19,17 @@ export default function BookingsScreen() {
       {bookings.map((booking) => {
         const artist = getArtist(booking.artistProfileId);
         return (
-          <LuxuryCard key={booking.id}>
+          <Link key={booking.id} href={`/bookings/${booking.id}`} asChild>
+          <Pressable>
+          <LuxuryCard>
             <Text style={styles.name}>{booking.eventName}</Text>
             <Text style={styles.muted}>{artist?.stageName} · {booking.eventDate}</Text>
             <Text style={styles.gold}>{formatZar(booking.quotedPriceZar)}</Text>
             <Text style={styles.status}>{BOOKING_STATUS_LABEL[booking.status]}</Text>
             {booking.travelWarning ? <Text style={styles.warn}>{booking.travelWarning}</Text> : null}
           </LuxuryCard>
+          </Pressable>
+          </Link>
         );
       })}
     </ScrollView>

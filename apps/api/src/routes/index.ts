@@ -194,6 +194,11 @@ apiRouter.post("/bookings/:bookingId/chat", requireAuth, (req: AuthenticatedRequ
   }));
 });
 
+apiRouter.get("/bookings/:bookingId/contracts", requireAuth, (req: AuthenticatedRequest, res) => {
+  assertBookingAccess(req, req.params.bookingId);
+  res.json(contractService.getByBookingId(req.params.bookingId));
+});
+
 apiRouter.post("/bookings/:bookingId/contracts/generate", requireAuth, (req: AuthenticatedRequest, res) => {
   assertBookingAccess(req, req.params.bookingId);
   res.status(201).json(contractService.generate(req.params.bookingId));
@@ -201,7 +206,7 @@ apiRouter.post("/bookings/:bookingId/contracts/generate", requireAuth, (req: Aut
 
 apiRouter.post("/bookings/:bookingId/contracts/revision", requireAuth, (req: AuthenticatedRequest, res) => {
   assertBookingAccess(req, req.params.bookingId);
-  res.json(contractService.requestRevision(req.params.bookingId));
+  res.json(contractService.requestRevision(req.params.bookingId, req.body.feedback));
 });
 
 apiRouter.post("/bookings/:bookingId/contracts/sign", requireAuth, (req: AuthenticatedRequest, res) => {
@@ -217,7 +222,27 @@ apiRouter.post("/bookings/:bookingId/contracts/sign", requireAuth, (req: Authent
 
 apiRouter.post("/bookings/:bookingId/payments/checkout", requireAuth, requireRole(["client"]), (req: AuthenticatedRequest, res) => {
   assertBookingAccess(req, req.params.bookingId);
-  res.status(201).json(paymentService.createCheckout(req.params.bookingId));
+  const phase = req.body.phase === "balance" ? "balance" : "deposit";
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  res.status(201).json(paymentService.createCheckout(req.params.bookingId, phase, baseUrl));
+});
+
+apiRouter.post("/bookings/:bookingId/payments/sandbox/complete", requireAuth, requireRole(["client"]), (req: AuthenticatedRequest, res) => {
+  assertBookingAccess(req, req.params.bookingId);
+  const phase = req.body.phase === "balance" ? "balance" : "deposit";
+  const result = paymentService.completeSandboxPayment(req.params.bookingId, phase);
+  const body =
+    phase === "deposit"
+      ? "Payment confirmed: 30% escrow deposit captured via PayFast sandbox. Calendar slot locked globally across StageBook."
+      : "Payment confirmed: remaining 70% balance collected via PayFast sandbox. Booking fully confirmed.";
+  chatService.send({
+    bookingId: req.params.bookingId,
+    senderUserId: req.auth!.userId,
+    senderRole: req.auth!.role,
+    body,
+    systemAction: "payment"
+  });
+  res.json(result);
 });
 
 apiRouter.post("/bookings/:bookingId/payments/deposit-paid", requireAuth, requireRole(["client"]), (req: AuthenticatedRequest, res) => {
@@ -228,6 +253,14 @@ apiRouter.post("/bookings/:bookingId/payments/deposit-paid", requireAuth, requir
 apiRouter.post("/bookings/:bookingId/payments/confirm", requireAuth, requireRole(["client"]), (req: AuthenticatedRequest, res) => {
   assertBookingAccess(req, req.params.bookingId);
   res.json(paymentService.confirmBooking(req.params.bookingId));
+});
+
+apiRouter.get("/payments/payfast/return", (_req, res) => {
+  res.type("html").send("<html><body style='font-family:sans-serif;background:#0B0B0B;color:#CBA848;padding:2rem'><h1>PayFast sandbox return</h1><p>Payment simulation acknowledged. Return to StageBook to view booking status.</p></body></html>");
+});
+
+apiRouter.get("/payments/payfast/cancel", (_req, res) => {
+  res.type("html").send("<html><body style='font-family:sans-serif;background:#0B0B0B;color:#fff;padding:2rem'><h1>PayFast sandbox cancelled</h1><p>No funds were captured.</p></body></html>");
 });
 
 apiRouter.post("/artists/:artistId/verification", requireAuth, requireRole(["artist"]), (req: AuthenticatedRequest, res) => {
