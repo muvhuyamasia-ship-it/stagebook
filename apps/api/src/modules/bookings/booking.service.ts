@@ -103,9 +103,11 @@ export class BookingService {
         { lat: nearestAdjacent.latitude, lng: nearestAdjacent.longitude }
       );
       const requiredTravelMinutes = Math.ceil(distanceKm * MINUTES_PER_KM);
-      const gapMinutes = Math.max(
-        Math.abs(startMinutes - toMinutes(nearestAdjacent.endTime)),
-        Math.abs(toMinutes(nearestAdjacent.startTime) - endMinutes)
+      const gapAfterExisting = startMinutes - toMinutes(nearestAdjacent.endTime);
+      const gapBeforeExisting = toMinutes(nearestAdjacent.startTime) - endMinutes;
+      const gapMinutes = Math.min(
+        gapAfterExisting >= 0 ? gapAfterExisting : Number.POSITIVE_INFINITY,
+        gapBeforeExisting >= 0 ? gapBeforeExisting : Number.POSITIVE_INFINITY
       );
 
       if (gapMinutes < requiredTravelMinutes) {

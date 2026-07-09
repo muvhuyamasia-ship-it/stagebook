@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { uniqueBookingSlot } from "./test-helpers.mjs";
+
 const API = process.env.API_BASE_URL ?? "http://localhost:4000";
 const WEB = process.env.WEB_BASE_URL ?? "http://localhost:5174";
 
@@ -39,13 +41,6 @@ async function login(base, email) {
   });
   if (!response.ok) throw new Error(`Login failed for ${email}: ${payload.message ?? response.status}`);
   return payload;
-}
-
-let dateCounter = 0;
-function uniqueDate() {
-  dateCounter += 1;
-  const day = 10 + ((Date.now() + dateCounter) % 18);
-  return `2026-11-${String(day).padStart(2, "0")}`;
 }
 
 async function runArtistDashboardFlow(label, base) {
@@ -129,9 +124,9 @@ async function runArtistDashboardFlow(label, base) {
   return profile.id;
 }
 
-async function runCompleteBookingFlow(label, base, artistProfileId) {
+async function runCompleteBookingFlow(label, base, artistProfileId, seed = 0) {
   console.log(`\n=== ${label}: Complete booking + payout ===`);
-  const eventDate = uniqueDate();
+  const { eventDate, startTime, endTime } = uniqueBookingSlot(seed);
 
   const client = await login(base, "client@stagebook.test");
   const artist = await login(base, "artist@stagebook.test");
@@ -144,8 +139,8 @@ async function runCompleteBookingFlow(label, base, artistProfileId) {
       eventName: `Complete flow ${label}`,
       eventType: "Corporate",
       eventDate,
-      startTime: "18:00",
-      endTime: "20:00",
+      startTime,
+      endTime,
       locationLabel: "Cape Town ICC",
       latitude: -33.9,
       longitude: 18.4,
@@ -266,10 +261,10 @@ async function main() {
   console.log(`API: ${API}  Web: ${WEB}`);
 
   const artistId = await runArtistDashboardFlow("Direct API", API);
-  if (artistId) await runCompleteBookingFlow("Direct API", API, artistId);
+  if (artistId) await runCompleteBookingFlow("Direct API", API, artistId, 70);
 
   const artistIdWeb = await runArtistDashboardFlow("Web proxy", WEB);
-  if (artistIdWeb) await runCompleteBookingFlow("Web proxy", WEB, artistIdWeb);
+  if (artistIdWeb) await runCompleteBookingFlow("Web proxy", WEB, artistIdWeb, 80);
 
   await testWebRoutes();
 

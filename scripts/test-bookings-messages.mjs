@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { uniqueBookingSlot } from "./test-helpers.mjs";
+
 const API = process.env.API_BASE_URL ?? "http://localhost:4000";
 const WEB = process.env.WEB_BASE_URL ?? "http://localhost:5174";
 const MOBILE_API = process.env.MOBILE_API_BASE_URL ?? "http://localhost:4000";
@@ -42,7 +44,8 @@ async function login(base, email, password) {
   return payload;
 }
 
-async function runFlow(label, base, eventDate) {
+async function runFlow(label, base, slot) {
+  const { eventDate, startTime, endTime } = slot;
   console.log(`\n=== ${label} ===`);
 
   const client = await login(base, "client@stagebook.test", "password123");
@@ -63,8 +66,8 @@ async function runFlow(label, base, eventDate) {
       eventName: `E2E ${label}`,
       eventType: "Corporate",
       eventDate,
-      startTime: "18:00",
-      endTime: "20:00",
+      startTime,
+      endTime,
       locationLabel: "Sandton Convention Centre",
       latitude: -26.107,
       longitude: 28.054,
@@ -166,13 +169,13 @@ async function testWebShell() {
   }
 }
 
-async function testMobileBundle(eventDate) {
+async function testMobileBundle(slot) {
   console.log("\n=== Mobile (API + Metro) ===");
   const res = await fetch("http://localhost:8081/");
   if (res.ok) ok("Mobile Metro responds (200)");
   else fail("Mobile Metro responds", String(res.status));
 
-  const bookingId = await runFlow("Mobile API", MOBILE_API, eventDate);
+  const bookingId = await runFlow("Mobile API", MOBILE_API, slot);
   if (!bookingId) return;
 
   const artist = await login(MOBILE_API, "artist@stagebook.test", "password123");
@@ -188,15 +191,10 @@ async function main() {
   console.log("StageBook bookings & messages E2E test");
   console.log(`API: ${API}  Web: ${WEB}  Mobile API: ${MOBILE_API}`);
 
-  const suffix = String(Date.now()).slice(-4);
-  const dateA = `2026-11-${String(10 + (Number(suffix[0]) % 9)).padStart(2, "0")}`;
-  const dateB = `2026-11-${String(20 + (Number(suffix[1]) % 9)).padStart(2, "0")}`;
-  const dateC = `2026-12-${String(1 + (Number(suffix[2]) % 9)).padStart(2, "0")}`;
-
-  await runFlow("Direct API", API, dateA);
-  await runFlow("Web proxy", WEB, dateB);
+  await runFlow("Direct API", API, uniqueBookingSlot(10));
+  await runFlow("Web proxy", WEB, uniqueBookingSlot(20));
   await testWebShell();
-  await testMobileBundle(dateC);
+  await testMobileBundle(uniqueBookingSlot(30));
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
   process.exit(failed > 0 ? 1 : 0);

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { uniqueBookingSlot } from "./test-helpers.mjs";
+
 const API = process.env.API_BASE_URL ?? "http://localhost:4000";
 const WEB = process.env.WEB_BASE_URL ?? "http://localhost:5174";
 
@@ -41,15 +43,9 @@ async function login(base, email) {
   return payload;
 }
 
-let dateCounter = 0;
-function uniqueDate() {
-  dateCounter += 1;
-  const day = 10 + ((Date.now() + dateCounter) % 18);
-  return `2026-12-${String(day).padStart(2, "0")}`;
-}
-
-async function runCoreFlow(label, base, eventDate = uniqueDate()) {
-  console.log(`\n=== ${label} (${eventDate}) ===`);
+async function runCoreFlow(label, base, slot = uniqueBookingSlot()) {
+  const { eventDate, startTime, endTime } = slot;
+  console.log(`\n=== ${label} (${eventDate} ${startTime}) ===`);
 
   const client = await login(base, "client@stagebook.test");
   ok(`${label}: client login`);
@@ -68,8 +64,8 @@ async function runCoreFlow(label, base, eventDate = uniqueDate()) {
       eventName: `Core E2E ${label}`,
       eventType: "Corporate",
       eventDate,
-      startTime: "18:00",
-      endTime: "20:00",
+      startTime,
+      endTime,
       locationLabel: "Sandton Convention Centre",
       latitude: -26.107,
       longitude: 28.054,
@@ -256,14 +252,14 @@ async function main() {
   console.log("StageBook core features E2E — messages, contracts, PayFast");
   console.log(`API: ${API}  Web: ${WEB}`);
 
-  await runCoreFlow("Direct API", API);
-  await runCoreFlow("Web proxy", WEB);
+  await runCoreFlow("Direct API", API, uniqueBookingSlot(40));
+  await runCoreFlow("Web proxy", WEB, uniqueBookingSlot(50));
   await testWebPages();
   const metro = await fetch("http://localhost:8081/");
   console.log("\n=== Mobile (Metro + API) ===");
   if (metro.ok) ok("Mobile Metro responds");
   else fail("Mobile Metro", String(metro.status));
-  await runCoreFlow("Mobile API", API);
+  await runCoreFlow("Mobile API", API, uniqueBookingSlot(60));
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
   process.exit(failed > 0 ? 1 : 0);
