@@ -103,7 +103,7 @@ export default function ArtistEditorScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: theme.colors.background },
+  page: { flex: 1, backgroundColor: theme.colors.obsidian },
   content: { padding: 20, gap: 12, paddingTop: 56 },
   back: { color: theme.colors.gold, marginBottom: 8 },
   title: { color: theme.colors.textPrimary, fontSize: 24, fontWeight: "700" },

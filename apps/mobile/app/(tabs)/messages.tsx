@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import type { MessageThreadFilter } from "@stagebook/shared";
-import { LuxuryCard } from "../../src/components/LuxuryCard";
+import { BlurHeader } from "../../src/components/BlurHeader";
+import { FloatingSurface } from "../../src/components/FloatingSurface";
+import { PressableScale } from "../../src/components/PressableScale";
 import { useStageBook } from "../../src/context/StageBookContext";
 import { theme } from "../../src/theme/theme";
 
@@ -14,86 +16,127 @@ export default function MessagesScreen() {
   const threads = useMemo(() => getMessageThreads(filter), [getMessageThreads, filter]);
 
   return (
-    <ScrollView style={styles.page} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Messages</Text>
-        {unreadMessageCount > 0 ? (
-          <Text style={styles.badge}>{unreadMessageCount} unread</Text>
-        ) : null}
-      </View>
+    <View style={styles.page}>
+      <BlurHeader
+        title="Messages"
+        subtitle={
+          unreadMessageCount > 0 ? `${unreadMessageCount} unread conversations` : "Negotiation inbox"
+        }
+      >
+        <View style={styles.filters}>
+          {filters.map((f) => (
+            <PressableScale
+              key={f}
+              style={[styles.filterChip, filter === f && styles.filterChipActive]}
+              haptic="selection"
+              onPress={() => setFilter(f)}
+            >
+              <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>{f}</Text>
+            </PressableScale>
+          ))}
+        </View>
 
-      <View style={styles.filters}>
-        {filters.map((f) => (
-          <Pressable
-            key={f}
-            style={[styles.filterChip, filter === f && styles.filterChipActive]}
-            onPress={() => setFilter(f)}
-          >
-            <Text style={styles.filterText}>{f}</Text>
-          </Pressable>
+        {threads.map((thread) => (
+          <Link key={thread.bookingId} href={`/messages/${thread.bookingId}`} asChild>
+            <PressableScale haptic="selection">
+              <FloatingSurface>
+                <View style={styles.row}>
+                  <Text style={styles.name}>{thread.artistName}</Text>
+                  {thread.unreadCount > 0 ? (
+                    <View style={styles.unreadBadge}>
+                      <Text style={styles.unread}>{thread.unreadCount}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.event}>{thread.eventName}</Text>
+                <Text style={styles.preview} numberOfLines={2}>
+                  {thread.lastMessage?.body ?? "No messages yet"}
+                </Text>
+                <View style={styles.meta}>
+                  <Text style={styles.status}>🟡 {thread.statusLabel}</Text>
+                  {thread.hasPendingCounter ? (
+                    <Text style={styles.counter}>Counter pending</Text>
+                  ) : null}
+                </View>
+              </FloatingSurface>
+            </PressableScale>
+          </Link>
         ))}
-      </View>
-
-      {threads.map((thread) => (
-        <Link key={thread.bookingId} href={`/messages/${thread.bookingId}`} asChild>
-          <Pressable>
-            <LuxuryCard>
-              <View style={styles.row}>
-                <Text style={styles.name}>{thread.artistName}</Text>
-                {thread.unreadCount > 0 ? (
-                  <Text style={styles.unread}>{thread.unreadCount}</Text>
-                ) : null}
-              </View>
-              <Text style={styles.event}>{thread.eventName}</Text>
-              <Text style={styles.preview} numberOfLines={2}>
-                {thread.lastMessage?.body ?? "No messages yet"}
-              </Text>
-              <View style={styles.meta}>
-                <Text style={styles.status}>🟡 {thread.statusLabel}</Text>
-                {thread.hasPendingCounter ? (
-                  <Text style={styles.counter}>Counter pending</Text>
-                ) : null}
-              </View>
-            </LuxuryCard>
-          </Pressable>
-        </Link>
-      ))}
-    </ScrollView>
+      </BlurHeader>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: theme.colors.background },
-  content: { padding: 20, gap: 12, paddingTop: 56 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  title: { color: theme.colors.textPrimary, fontSize: 28, fontWeight: "700" },
-  badge: { color: theme.colors.gold, fontWeight: "700" },
-  filters: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  page: {
+    flex: 1,
+    backgroundColor: theme.colors.obsidian
+  },
+  filters: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap"
+  },
   filterChip: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: theme.colors.border
+    borderRadius: theme.radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.borderFine,
+    backgroundColor: "rgba(255,255,255,0.03)"
   },
   filterChipActive: {
     borderColor: theme.colors.borderGold,
     backgroundColor: theme.colors.goldSoft
   },
-  filterText: { color: theme.colors.textPrimary, fontSize: 12, textTransform: "capitalize" },
-  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  name: { color: theme.colors.textPrimary, fontWeight: "700", fontSize: 17 },
-  unread: {
-    backgroundColor: theme.colors.gold,
-    color: "#1a1408",
-    fontWeight: "700",
-    paddingHorizontal: 8,
-    borderRadius: 999,
-    fontSize: 11
+  filterText: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    textTransform: "capitalize"
   },
-  event: { color: theme.colors.textMuted, fontSize: 13 },
-  preview: { color: theme.colors.textMuted, marginTop: 6 },
-  meta: { flexDirection: "row", gap: 10, marginTop: 8 },
-  status: { color: theme.colors.warning, fontSize: 12, fontWeight: "600" },
-  counter: { color: theme.colors.warning, fontSize: 11 }
+  filterTextActive: {
+    color: theme.colors.gold,
+    fontWeight: "700"
+  },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+  name: {
+    ...theme.typography.headline,
+    color: theme.colors.textPrimary
+  },
+  unreadBadge: {
+    backgroundColor: theme.colors.gold,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: theme.radius.pill
+  },
+  unread: {
+    ...theme.typography.caption,
+    color: "#1a1408",
+    fontWeight: "700"
+  },
+  event: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted
+  },
+  preview: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted
+  },
+  meta: {
+    flexDirection: "row",
+    gap: 10
+  },
+  status: {
+    ...theme.typography.caption,
+    color: theme.colors.warning,
+    fontWeight: "600"
+  },
+  counter: {
+    ...theme.typography.caption,
+    color: theme.colors.warning
+  }
 });

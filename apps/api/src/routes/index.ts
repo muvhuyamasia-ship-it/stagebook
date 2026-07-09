@@ -160,20 +160,24 @@ apiRouter.post("/bookings", requireAuth, requireRole(["client"]), (req: Authenti
 
 apiRouter.post("/bookings/:bookingId/decision", requireAuth, (req: AuthenticatedRequest, res) => {
   const booking = bookingService.getById(req.params.bookingId);
-  const { status, counterPriceZar } = req.body;
+  const { status, counterPriceZar, counterStartTime, counterEndTime } = req.body;
 
   if (req.auth!.role === "client") {
     if (booking.clientUserId !== req.auth!.userId) {
       throw new AppError("You cannot manage this booking", 403);
     }
-    if (!["agreement", "declined"].includes(status) || counterPriceZar) {
+    if (!["agreement", "declined"].includes(status)) {
       throw new AppError("Clients can only accept or decline offers", 400);
     }
   } else {
     assertBookingManager(req, req.params.bookingId);
   }
 
-  const result = bookingService.transitionStatus(req.params.bookingId, status, counterPriceZar);
+  const result = bookingService.transitionStatus(req.params.bookingId, status, {
+    quotedPriceZar: counterPriceZar,
+    startTime: counterStartTime,
+    endTime: counterEndTime
+  });
   res.json(result);
 });
 

@@ -1,61 +1,87 @@
-import { Link } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { AVAILABILITY_LABEL, formatZar } from "@stagebook/shared";
-import { LuxuryCard } from "../../src/components/LuxuryCard";
+import { router } from "expo-router";
+import { useRef } from "react";
+import { StyleSheet, Text, TextInput, View } from "react-native";
+import { ArtistDiscoveryCard } from "../../src/components/ArtistDiscoveryCard";
+import { BlurHeader } from "../../src/components/BlurHeader";
+import { FloatingSurface } from "../../src/components/FloatingSurface";
+import { PressableScale } from "../../src/components/PressableScale";
+import { ArtistCardSkeleton } from "../../src/components/Skeleton";
+import { useSheets } from "../../src/context/SheetContext";
 import { useStageBook } from "../../src/context/StageBookContext";
 import { theme } from "../../src/theme/theme";
 
 export default function DiscoverScreen() {
-  const { filteredArtists, filters, setFilters } = useStageBook();
+  const { filteredArtists, filters, setFilters, dataLoading } = useStageBook();
+  const { openFilters } = useSheets();
+  const searchRef = useRef<TextInput>(null);
 
   return (
-    <ScrollView style={styles.page} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Discover</Text>
-      <LuxuryCard>
-        <TextInput
-          style={styles.input}
-          placeholder="Search artists, genres…"
-          placeholderTextColor={theme.colors.textMuted}
-          value={filters.query}
-          onChangeText={(query) => setFilters({ query })}
-        />
-      </LuxuryCard>
-      {filteredArtists.map((artist) => (
-        <Link key={artist.id} href={`/artists/${artist.id}`} asChild>
-          <Pressable>
-            <LuxuryCard>
-              <View style={styles.row}>
-                <View style={styles.avatar} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{artist.stageName}</Text>
-                  <Text style={styles.muted}>{artist.city}</Text>
-                </View>
-                <Text style={styles.status}>{AVAILABILITY_LABEL[artist.availabilityStatus]}</Text>
-              </View>
-              <Text style={styles.gold}>⭐ {artist.rating} · From {formatZar(artist.basePriceZar)}</Text>
-            </LuxuryCard>
-          </Pressable>
-        </Link>
-      ))}
-    </ScrollView>
+    <View style={styles.page}>
+      <BlurHeader
+        title="Discover"
+        subtitle="Curated talent for premium live experiences"
+        rightSlot={
+          <PressableScale style={styles.filterBtn} haptic="selection" onPress={openFilters}>
+            <Text style={styles.filterBtnText}>Filters</Text>
+          </PressableScale>
+        }
+      >
+        <FloatingSurface>
+          <Text style={styles.searchLabel}>Search</Text>
+          <TextInput
+            ref={searchRef}
+            style={styles.input}
+            placeholder="Artists, genres, cities…"
+            placeholderTextColor={theme.colors.textMuted}
+            value={filters.query}
+            onChangeText={(query) => setFilters({ query })}
+          />
+        </FloatingSurface>
+
+        {dataLoading
+          ? Array.from({ length: 3 }).map((_, index) => <ArtistCardSkeleton key={index} />)
+          : filteredArtists.map((artist) => (
+              <ArtistDiscoveryCard
+                key={artist.id}
+                artist={artist}
+                onPress={() => router.push(`/artists/${artist.id}`)}
+              />
+            ))}
+      </BlurHeader>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: theme.colors.background },
-  content: { padding: 20, gap: 12, paddingTop: 56 },
-  title: { color: theme.colors.textPrimary, fontSize: 28, fontWeight: "700" },
-  input: {
-    color: theme.colors.textPrimary,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 12,
-    padding: 12
+  page: {
+    flex: 1,
+    backgroundColor: theme.colors.obsidian
   },
-  row: { flexDirection: "row", alignItems: "center", gap: 12 },
-  avatar: { width: 48, height: 48, borderRadius: 14, backgroundColor: "rgba(203,168,72,0.18)" },
-  name: { color: theme.colors.textPrimary, fontWeight: "700", fontSize: 17 },
-  muted: { color: theme.colors.textMuted, fontSize: 13 },
-  status: { color: theme.colors.success, fontSize: 11, fontWeight: "700" },
-  gold: { color: theme.colors.gold, fontWeight: "600" }
+  filterBtn: {
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.borderFine,
+    backgroundColor: "rgba(255,255,255,0.05)"
+  },
+  filterBtnText: {
+    ...theme.typography.caption,
+    color: theme.colors.gold,
+    fontWeight: "700"
+  },
+  searchLabel: {
+    ...theme.typography.overline,
+    color: theme.colors.gold
+  },
+  input: {
+    ...theme.typography.body,
+    color: theme.colors.textPrimary,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.borderFine,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: "rgba(255,255,255,0.03)"
+  }
 });

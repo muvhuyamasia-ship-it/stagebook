@@ -81,6 +81,34 @@ describe("BookingService", () => {
     expect(result.booking.travelWarning).toMatch(/Travel time may be insufficient/i);
   });
 
+  it("updates price and times when a counter-offer is accepted", () => {
+    const booking = bookingService.create({
+      artistProfileId: "artist-1",
+      clientUserId: "client-1",
+      eventName: "Simulator booking test",
+      eventType: "Corporate",
+      eventDate: "2026-07-30",
+      startTime: "18:00",
+      endTime: "20:00",
+      locationLabel: "Sandton",
+      latitude: -26.1076,
+      longitude: 28.0567,
+      guestCount: 120,
+      quotedPriceZar: 22000
+    }).booking;
+
+    const result = bookingService.transitionStatus(booking.id, "agreement", {
+      quotedPriceZar: 20000,
+      startTime: "20:00",
+      endTime: "22:00"
+    });
+
+    expect(result.booking.status).toBe("agreement");
+    expect(result.booking.quotedPriceZar).toBe(20000);
+    expect(result.booking.startTime).toBe("20:00");
+    expect(result.booking.endTime).toBe("22:00");
+  });
+
   it("calculates refunds and requires a cancellation reason", () => {
     const booking = bookingService.create({
       artistProfileId: "artist-1",

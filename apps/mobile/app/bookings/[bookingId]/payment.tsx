@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocalSearchParams } from "expo-router";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
@@ -13,13 +13,43 @@ import { LuxuryCard } from "../../../src/components/LuxuryCard";
 import { theme } from "../../../src/theme/theme";
 
 export default function PaymentScreen() {
-  const { bookingId = "" } = useLocalSearchParams<{ bookingId: string }>();
+  const { bookingId = "", pay: payParam } = useLocalSearchParams<{
+    bookingId: string;
+    pay?: string;
+  }>();
   const { getBooking, getPaymentSchedule, createPayfastCheckout, completePayfastPayment } =
     useStageBook();
   const booking = getBooking(bookingId);
   const schedule = getPaymentSchedule(bookingId);
   const [checkout, setCheckout] = useState<PayfastCheckoutSession | null>(null);
   const [loading, setLoading] = useState(false);
+  const autoPayStarted = useRef(false);
+
+  useEffect(() => {
+    const phase = payParam === "balance" ? "balance" : payParam === "deposit" ? "deposit" : null;
+    if (!phase || !bookingId || !booking || !schedule || autoPayStarted.current) return;
+    if (phase === "deposit" && (booking.status === "paid" || booking.status === "confirmed")) return;
+    if (phase === "balance" && booking.status === "confirmed") return;
+    autoPayStarted.current = true;
+
+    void (async () => {
+      setLoading(true);
+      const session = await createPayfastCheckout(bookingId, phase);
+      if (session) {
+        setCheckout(session);
+        await completePayfastPayment(bookingId, phase);
+      }
+      setLoading(false);
+      setCheckout(null);
+    })();
+  }, [
+    booking,
+    bookingId,
+    completePayfastPayment,
+    createPayfastCheckout,
+    payParam,
+    schedule
+  ]);
 
   if (!booking || !schedule) {
     return (
@@ -106,7 +136,7 @@ export default function PaymentScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: theme.colors.background },
+  page: { flex: 1, backgroundColor: theme.colors.obsidian },
   content: { padding: 20, gap: 12, paddingTop: 56 },
   back: { color: theme.colors.gold, marginBottom: 8 },
   title: { color: theme.colors.textPrimary, fontSize: 28, fontWeight: "700" },

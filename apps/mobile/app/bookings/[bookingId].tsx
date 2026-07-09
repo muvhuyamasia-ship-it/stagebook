@@ -1,7 +1,9 @@
-import { Link, useLocalSearchParams } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
+import { Link, router, useLocalSearchParams } from "expo-router";
+import { StyleSheet, Text } from "react-native";
 import { BOOKING_STATUS_LABEL, formatZar } from "@stagebook/shared";
-import { LuxuryCard } from "../../src/components/LuxuryCard";
+import { BlurHeader } from "../../src/components/BlurHeader";
+import { FloatingSurface } from "../../src/components/FloatingSurface";
+import { PressableScale } from "../../src/components/PressableScale";
 import { useAuth } from "../../src/context/AuthContext";
 import { useStageBook } from "../../src/context/StageBookContext";
 import { theme } from "../../src/theme/theme";
@@ -16,101 +18,144 @@ export default function BookingDetailScreen() {
 
   if (!booking) {
     return (
-      <ScrollView style={styles.page}>
-        <Text style={styles.title}>Booking not found</Text>
-      </ScrollView>
+      <BlurHeader
+        title="Not found"
+        subtitle="This booking is unavailable"
+        leftSlot={
+          <PressableScale haptic="selection" onPress={() => router.back()}>
+            <Text style={styles.back}>←</Text>
+          </PressableScale>
+        }
+      >
+        <FloatingSurface>
+          <Text style={styles.muted}>Return to Bookings to view your schedule.</Text>
+        </FloatingSurface>
+      </BlurHeader>
     );
   }
 
   return (
-    <ScrollView style={styles.page} contentContainerStyle={styles.content}>
-      <Link href="/(tabs)/bookings" asChild>
-        <Pressable>
-          <Text style={styles.back}>← Bookings</Text>
-        </Pressable>
-      </Link>
-      <LuxuryCard>
-        <Text style={styles.title}>{booking.eventName}</Text>
-        <Text style={styles.muted}>
-          {artist?.stageName} · {booking.eventDate}
-        </Text>
+    <BlurHeader
+      title={booking.eventName}
+      subtitle={`${artist?.stageName ?? "Artist"} · ${booking.eventDate}`}
+      leftSlot={
+        <PressableScale haptic="selection" onPress={() => router.back()}>
+          <Text style={styles.back}>←</Text>
+        </PressableScale>
+      }
+    >
+      <FloatingSurface>
         <Text style={styles.gold}>{formatZar(booking.quotedPriceZar)}</Text>
         <Text style={styles.status}>{BOOKING_STATUS_LABEL[booking.status]}</Text>
-      </LuxuryCard>
+      </FloatingSurface>
+
       {(role === "artist" || role === "representative") && booking.status === "request_sent" ? (
-        <LuxuryCard>
+        <FloatingSurface>
           <Text style={styles.section}>Decision</Text>
-          <Pressable style={styles.btn} onPress={() => void acceptOffer(booking.id)}>
+          <PressableScale
+            style={styles.btn}
+            haptic="medium"
+            onPress={() => void acceptOffer(booking.id)}
+          >
             <Text style={styles.btnText}>Accept offer</Text>
-          </Pressable>
-          <Pressable style={styles.btnOutline} onPress={() => void declineOffer(booking.id)}>
+          </PressableScale>
+          <PressableScale
+            style={styles.btnOutline}
+            haptic="selection"
+            onPress={() => void declineOffer(booking.id)}
+          >
             <Text style={styles.btnOutlineText}>Decline request</Text>
-          </Pressable>
-        </LuxuryCard>
+          </PressableScale>
+        </FloatingSurface>
       ) : null}
 
       {(role === "artist" || role === "representative") &&
       ["paid", "confirmed"].includes(booking.status) ? (
-        <LuxuryCard>
+        <FloatingSurface>
           <Text style={styles.section}>Post-event</Text>
           <Text style={styles.muted}>
             Mark complete after the event to release earnings to your available balance.
           </Text>
-          <Pressable style={styles.btn} onPress={() => void completeBooking(booking.id)}>
+          <PressableScale
+            style={styles.btn}
+            haptic="medium"
+            onPress={() => void completeBooking(booking.id)}
+          >
             <Text style={styles.btnText}>Mark engagement complete</Text>
-          </Pressable>
-        </LuxuryCard>
+          </PressableScale>
+        </FloatingSurface>
       ) : null}
 
-      <LuxuryCard>
+      <FloatingSurface>
         <Text style={styles.muted}>Venue: {booking.locationLabel}</Text>
         <Text style={styles.muted}>
           Time: {booking.startTime} – {booking.endTime}
         </Text>
         <Link href={`/messages/${bookingId}`} asChild>
-          <Pressable style={styles.btn}>
+          <PressableScale style={styles.btn} haptic="medium">
             <Text style={styles.btnText}>Messages & negotiation</Text>
-          </Pressable>
+          </PressableScale>
         </Link>
         <Link href={`/bookings/${bookingId}/contract`} asChild>
-          <Pressable style={styles.btnOutline}>
+          <PressableScale style={styles.btnOutline} haptic="selection">
             <Text style={styles.btnOutlineText}>Contract</Text>
-          </Pressable>
+          </PressableScale>
         </Link>
         <Link href={`/bookings/${bookingId}/payment`} asChild>
-          <Pressable style={styles.btnOutline}>
+          <PressableScale style={styles.btnOutline} haptic="selection">
             <Text style={styles.btnOutlineText}>PayFast payment</Text>
-          </Pressable>
+          </PressableScale>
         </Link>
-      </LuxuryCard>
-    </ScrollView>
+      </FloatingSurface>
+    </BlurHeader>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: theme.colors.background },
-  content: { padding: 20, gap: 12, paddingTop: 56 },
-  back: { color: theme.colors.gold, marginBottom: 8 },
-  title: { color: theme.colors.textPrimary, fontSize: 24, fontWeight: "700" },
-  section: { color: theme.colors.textPrimary, fontWeight: "700", fontSize: 17, marginBottom: 8 },
-  muted: { color: theme.colors.textMuted, marginTop: 4 },
-  gold: { color: theme.colors.gold, fontWeight: "700", fontSize: 18, marginTop: 6 },
-  status: { color: theme.colors.warning, fontWeight: "700", marginTop: 6 },
+  back: {
+    ...theme.typography.headline,
+    color: theme.colors.gold
+  },
+  section: {
+    ...theme.typography.overline,
+    color: theme.colors.gold
+  },
+  muted: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted
+  },
+  gold: {
+    ...theme.typography.metric,
+    color: theme.colors.gold
+  },
+  status: {
+    ...theme.typography.caption,
+    color: theme.colors.warning,
+    fontWeight: "700"
+  },
   btn: {
     backgroundColor: theme.colors.gold,
-    padding: 12,
-    borderRadius: 999,
+    paddingVertical: 14,
+    borderRadius: theme.radius.pill,
     alignItems: "center",
-    marginTop: 12
+    marginTop: 4
   },
-  btnText: { color: "#1a1408", fontWeight: "700" },
+  btnText: {
+    ...theme.typography.body,
+    color: "#1a1408",
+    fontWeight: "700"
+  },
   btnOutline: {
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: theme.colors.borderGold,
-    padding: 12,
-    borderRadius: 999,
+    paddingVertical: 14,
+    borderRadius: theme.radius.pill,
     alignItems: "center",
-    marginTop: 8
+    marginTop: 4
   },
-  btnOutlineText: { color: theme.colors.gold, fontWeight: "600" }
+  btnOutlineText: {
+    ...theme.typography.body,
+    color: theme.colors.gold,
+    fontWeight: "600"
+  }
 });

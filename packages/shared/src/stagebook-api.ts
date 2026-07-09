@@ -47,6 +47,8 @@ export interface CreateBookingInput {
 export interface BookingDecisionInput {
   status: BookingStatus;
   counterPriceZar?: number;
+  counterStartTime?: string;
+  counterEndTime?: string;
 }
 
 export interface CreateBookingResponse {

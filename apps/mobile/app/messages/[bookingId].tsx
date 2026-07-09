@@ -1,15 +1,36 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { BOOKING_STATUS_LABEL, STAGEBOOK_TIME_SLOTS } from "@stagebook/shared";
 import { LuxuryCard } from "../../src/components/LuxuryCard";
+import { PressableScale } from "../../src/components/PressableScale";
 import { ChatMessageBubble } from "../../src/components/ChatMessageBubble";
 import { useAuth } from "../../src/context/AuthContext";
 import { useStageBook } from "../../src/context/StageBookContext";
 import { theme } from "../../src/theme/theme";
 
 export default function MessageThreadScreen() {
-  const { bookingId = "" } = useLocalSearchParams<{ bookingId: string }>();
+  const {
+    bookingId = "",
+    send: sendParam,
+    counter: counterParam,
+    price: priceParam,
+    start: startParam,
+    end: endParam,
+    note: noteParam,
+    accept: acceptParam,
+    acceptCounter: acceptCounterParam
+  } = useLocalSearchParams<{
+    bookingId: string;
+    send?: string;
+    counter?: string;
+    price?: string;
+    start?: string;
+    end?: string;
+    note?: string;
+    accept?: string;
+    acceptCounter?: string;
+  }>();
   const router = useRouter();
   const { session } = useAuth();
   const {
@@ -39,6 +60,63 @@ export default function MessageThreadScreen() {
   const [counterStart, setCounterStart] = useState(booking?.startTime ?? "18:00");
   const [counterEnd, setCounterEnd] = useState(booking?.endTime ?? "20:00");
   const [counterNote, setCounterNote] = useState("");
+  const autoSendStarted = useRef(false);
+  const autoCounterStarted = useRef(false);
+  const autoAcceptStarted = useRef(false);
+
+  useEffect(() => {
+    if (!sendParam || !bookingId || autoSendStarted.current) return;
+    autoSendStarted.current = true;
+    const text = Array.isArray(sendParam) ? sendParam[0] : sendParam;
+    if (!text?.trim()) return;
+    void sendMessage(bookingId, text.trim());
+  }, [bookingId, sendParam, sendMessage]);
+
+  useEffect(() => {
+    const enabled = counterParam === "1" || counterParam === "true";
+    if (!enabled || !bookingId || autoCounterStarted.current) return;
+    autoCounterStarted.current = true;
+
+    const price = Number(Array.isArray(priceParam) ? priceParam[0] : priceParam) || 19500;
+    const startTime = (Array.isArray(startParam) ? startParam[0] : startParam) ?? "19:00";
+    const endTime = (Array.isArray(endParam) ? endParam[0] : endParam) ?? "21:00";
+    const note = Array.isArray(noteParam) ? noteParam[0] : noteParam;
+
+    void sendCounterOffer(bookingId, {
+      priceZar: price,
+      startTime,
+      endTime,
+      note: note || "Extended 90-minute set with percussion add-on."
+    });
+  }, [bookingId, counterParam, endParam, noteParam, priceParam, sendCounterOffer, startParam]);
+
+  useEffect(() => {
+    const acceptOfferEnabled = acceptParam === "1" || acceptParam === "true";
+    const acceptCounterEnabled = acceptCounterParam === "1" || acceptCounterParam === "true";
+    if ((!acceptOfferEnabled && !acceptCounterEnabled) || !bookingId || autoAcceptStarted.current) {
+      return;
+    }
+    autoAcceptStarted.current = true;
+
+    if (acceptCounterEnabled) {
+      const pendingOffer = getPendingCounterOffer(bookingId);
+      if (pendingOffer) {
+        void acceptCounterOffer(pendingOffer.id);
+        return;
+      }
+    }
+
+    if (acceptOfferEnabled) {
+      void acceptOffer(bookingId);
+    }
+  }, [
+    acceptCounterOffer,
+    acceptCounterParam,
+    acceptOffer,
+    acceptParam,
+    bookingId,
+    getPendingCounterOffer
+  ]);
 
   useEffect(() => {
     markThreadRead(bookingId);
@@ -70,9 +148,9 @@ export default function MessageThreadScreen() {
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
-      <Pressable onPress={() => router.back()}>
+      <PressableScale haptic="selection" onPress={() => router.back()}>
         <Text style={styles.back}>← Back to inbox</Text>
-      </Pressable>
+      </PressableScale>
 
       <LuxuryCard>
         <Text style={styles.title}>{artist?.stageName}</Text>
@@ -109,8 +187,9 @@ export default function MessageThreadScreen() {
           placeholder="Type a secure message…"
           placeholderTextColor={theme.colors.textMuted}
         />
-        <Pressable
+        <PressableScale
           style={styles.btn}
+          haptic="medium"
           onPress={() => {
             if (!body.trim()) return;
             void sendMessage(bookingId, body.trim());
@@ -118,7 +197,7 @@ export default function MessageThreadScreen() {
           }}
         >
           <Text style={styles.btnText}>Send</Text>
-        </Pressable>
+        </PressableScale>
       </LuxuryCard>
 
       <LuxuryCard>
@@ -209,7 +288,7 @@ export default function MessageThreadScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: theme.colors.background },
+  page: { flex: 1, backgroundColor: theme.colors.obsidian },
   content: { padding: 20, gap: 12, paddingBottom: 40, paddingTop: 56 },
   back: { color: theme.colors.gold, marginBottom: 8 },
   title: { color: theme.colors.textPrimary, fontSize: 24, fontWeight: "700" },

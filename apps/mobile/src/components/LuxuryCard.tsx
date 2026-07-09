@@ -1,24 +1,7 @@
 import type { ReactNode } from "react";
-import { StyleSheet, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { theme } from "../theme/theme";
+import { FloatingSurface } from "./FloatingSurface";
 
+/** @deprecated Prefer FloatingSurface — kept for gradual migration */
 export function LuxuryCard({ children }: { children: ReactNode }) {
-  return (
-    <LinearGradient colors={[...theme.gradients.card]} style={styles.card}>
-      <View style={styles.inner}>{children}</View>
-    </LinearGradient>
-  );
+  return <FloatingSurface>{children}</FloatingSurface>;
 }
-
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    borderColor: theme.colors.border
-  },
-  inner: {
-    padding: 18,
-    gap: 12
-  }
-});

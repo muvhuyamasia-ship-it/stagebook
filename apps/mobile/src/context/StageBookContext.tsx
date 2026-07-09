@@ -115,8 +115,23 @@ interface StageBookContextValue {
 
 const StageBookContext = createContext<StageBookContextValue | null>(null);
 
+function bookingsAreEqual(current: BookingRequest[], next: BookingRequest[]) {
+  if (current.length !== next.length) return false;
+  return current.every((booking, index) => {
+    const candidate = next[index];
+    return (
+      booking.id === candidate.id &&
+      booking.status === candidate.status &&
+      booking.eventDate === candidate.eventDate &&
+      booking.quotedPriceZar === candidate.quotedPriceZar
+    );
+  });
+}
+
 export function StageBookProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth();
+  const sessionUserId = session?.user.id ?? null;
+  const sessionRole = session?.user.role ?? null;
   const [artists, setArtists] = useState<ArtistProfile[]>([]);
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -134,9 +149,10 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
   const counterOffers = useMemo(() => deriveCounterOffersFromChat(chatMessages), [chatMessages]);
 
   const refreshBookings = useCallback(async () => {
-    if (!session) {
+    if (!sessionUserId) {
       setBookings([]);
       setChatMessages([]);
+      setContracts([]);
       return;
     }
 
@@ -144,17 +160,16 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
     setDataError(null);
     try {
       const nextBookings = await stagebookApi.listMyBookings();
-      setBookings(nextBookings);
+      setBookings((prev) => (bookingsAreEqual(prev, nextBookings) ? prev : nextBookings));
       const chats = await Promise.all(nextBookings.map((booking) => stagebookApi.listChat(booking.id)));
       setChatMessages(chats.flat());
       const contractResults = await Promise.allSettled(
         nextBookings.map((booking) => stagebookApi.getContract(booking.id))
       );
-      setContracts(
-        contractResults
-          .filter((result): result is PromiseFulfilledResult<ContractRecord> => result.status === "fulfilled")
-          .map((result) => result.value)
-      );
+      const nextContracts = contractResults
+        .filter((result): result is PromiseFulfilledResult<ContractRecord> => result.status === "fulfilled")
+        .map((result) => result.value);
+      setContracts(nextContracts);
     } catch (error) {
       const message =
         error instanceof StagebookApiError ? error.message : "Unable to load bookings";
@@ -162,7 +177,7 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
     } finally {
       setDataLoading(false);
     }
-  }, [session]);
+  }, [sessionUserId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,15 +192,18 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
     }
 
     void loadArtists();
-    void refreshBookings();
-
     return () => {
       cancelled = true;
     };
-  }, [refreshBookings]);
+  }, []);
 
-  const setFilters = (patch: Partial<DiscoveryFilters>) =>
+  useEffect(() => {
+    void refreshBookings();
+  }, [sessionUserId, refreshBookings]);
+
+  const setFilters = useCallback((patch: Partial<DiscoveryFilters>) => {
     setFiltersState((current) => ({ ...current, ...patch }));
+  }, []);
 
   const artistNameById = useMemo(
     () => Object.fromEntries(artists.map((artist) => [artist.id, artist.stageName])),
@@ -201,12 +219,15 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
     [artists, filters]
   );
 
-  const getArtist = (id: string) => artists.find((artist) => artist.id === id);
-  const getBooking = (id: string) => bookings.find((booking) => booking.id === id);
-  const getBookingChat = (id: string) =>
-    chatMessages
-      .filter((message) => message.bookingId === id)
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const getArtist = useCallback((id: string) => artists.find((artist) => artist.id === id), [artists]);
+  const getBooking = useCallback((id: string) => bookings.find((booking) => booking.id === id), [bookings]);
+  const getBookingChat = useCallback(
+    (id: string) =>
+      chatMessages
+        .filter((message) => message.bookingId === id)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    [chatMessages]
+  );
 
   const getMessageThreads = useCallback(
     (filter: MessageThreadFilter = "all") =>
@@ -221,20 +242,29 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
     [bookings, chatMessages, counterOffers, readAtByBooking, artistNameById]
   );
 
-  const getBookingContext = (bookingId: string) => {
-    const booking = bookings.find((entry) => entry.id === bookingId);
-    if (!booking) return [];
-    return buildBookingContext(booking, artistNameById[booking.artistProfileId] ?? "Artist");
-  };
+  const getBookingContext = useCallback(
+    (bookingId: string) => {
+      const booking = bookings.find((entry) => entry.id === bookingId);
+      if (!booking) return [];
+      return buildBookingContext(booking, artistNameById[booking.artistProfileId] ?? "Artist");
+    },
+    [bookings, artistNameById]
+  );
 
-  const getPendingCounterOffer = (bookingId: string) =>
-    counterOffers.find((offer) => offer.bookingId === bookingId && offer.status === "pending");
+  const getPendingCounterOffer = useCallback(
+    (bookingId: string) =>
+      counterOffers.find((offer) => offer.bookingId === bookingId && offer.status === "pending"),
+    [counterOffers]
+  );
 
-  const getCounterOffer = (offerId: string) => counterOffers.find((offer) => offer.id === offerId);
+  const getCounterOffer = useCallback(
+    (offerId: string) => counterOffers.find((offer) => offer.id === offerId),
+    [counterOffers]
+  );
 
-  const markThreadRead = (bookingId: string) => {
+  const markThreadRead = useCallback((bookingId: string) => {
     setReadAtByBooking((prev) => ({ ...prev, [bookingId]: new Date().toISOString() }));
-  };
+  }, []);
 
   const unreadMessageCount = useMemo(
     () => getMessageThreads("unread").reduce((sum, thread) => sum + thread.unreadCount, 0),
@@ -280,7 +310,9 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
         if (session.user.role === "artist" || session.user.role === "representative") {
           const decision = await stagebookApi.bookingDecision(bookingId, {
             status: "agreement",
-            counterPriceZar: input.priceZar
+            counterPriceZar: input.priceZar,
+            counterStartTime: input.startTime,
+            counterEndTime: input.endTime
           });
           setBookings((prev) =>
             prev.map((entry) => (entry.id === bookingId ? decision.booking : entry))
@@ -309,13 +341,15 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
       try {
         const decision = await stagebookApi.bookingDecision(offer.bookingId, {
           status: "agreement",
-          counterPriceZar: offer.proposedPriceZar
+          counterPriceZar: offer.proposedPriceZar,
+          counterStartTime: offer.proposedStartTime,
+          counterEndTime: offer.proposedEndTime
         });
         setBookings((prev) =>
           prev.map((entry) => (entry.id === offer.bookingId ? decision.booking : entry))
         );
         const message = await stagebookApi.sendChat(offer.bookingId, {
-          body: `Counter-offer accepted at R${offer.proposedPriceZar.toLocaleString("en-ZA")}.`,
+          body: `Counter-offer accepted at R${offer.proposedPriceZar.toLocaleString("en-ZA")} · ${offer.proposedStartTime}–${offer.proposedEndTime}.`,
           systemAction: "accept"
         });
         setChatMessages((prev) => [...prev, message]);
@@ -408,7 +442,10 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const getContract = (bookingId: string) => contracts.find((entry) => entry.bookingId === bookingId);
+  const getContract = useCallback(
+    (bookingId: string) => contracts.find((entry) => entry.bookingId === bookingId),
+    [contracts]
+  );
 
   const loadContract = useCallback(async (bookingId: string) => {
     try {
@@ -603,7 +640,7 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
   );
 
   const loadArtistDashboard = useCallback(async () => {
-    if (!session || session.user.role !== "artist") {
+    if (!sessionUserId || sessionRole !== "artist") {
       setMyArtistProfile(null);
       setPayoutBalances(null);
       setPayouts([]);
@@ -613,8 +650,16 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
 
     try {
       const profile = await stagebookApi.getMyArtistProfile();
-      setMyArtistProfile(profile);
-      setArtists((prev) => [...prev.filter((a) => a.id !== profile.id), profile]);
+      setMyArtistProfile((prev) =>
+        prev?.id === profile.id && prev.stageName === profile.stageName ? prev : profile
+      );
+      setArtists((prev) => {
+        const existing = prev.find((artist) => artist.id === profile.id);
+        if (existing?.stageName === profile.stageName && existing.basePriceZar === profile.basePriceZar) {
+          return prev;
+        }
+        return [...prev.filter((artist) => artist.id !== profile.id), profile];
+      });
       const [balances, payoutList] = await Promise.all([
         stagebookApi.getPayoutBalances(profile.id),
         stagebookApi.listPayouts(profile.id)
@@ -632,11 +677,11 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
         error instanceof StagebookApiError ? error.message : "Unable to load artist dashboard";
       setDataError(message);
     }
-  }, [session]);
+  }, [sessionUserId, sessionRole]);
 
   useEffect(() => {
     void loadArtistDashboard();
-  }, [loadArtistDashboard]);
+  }, [sessionUserId, sessionRole, loadArtistDashboard]);
 
   const completeBooking = useCallback(
     async (bookingId: string) => {
@@ -706,62 +751,110 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
     }
   }, [myArtistProfile]);
 
-  return (
-    <StageBookContext.Provider
-      value={{
-        artists,
-        bookings,
-        chatMessages,
-        counterOffers,
-        notifications,
-        filters,
-        setFilters,
-        filteredArtists,
-        dataLoading,
-        dataError,
-        refreshBookings,
-        getArtist,
-        getBooking,
-        getBookingChat,
-        getMessageThreads,
-        getBookingContext,
-        getPendingCounterOffer,
-        getCounterOffer,
-        markThreadRead,
-        unreadMessageCount,
-        sendMessage,
-        sendCounterOffer,
-        acceptCounterOffer,
-        declineCounterOffer,
-        acceptOffer,
-        declineOffer,
-        refreshThread,
-        contracts,
-        getContract,
-        loadContract,
-        generateContract,
-        signContract,
-        requestAmendment,
-        getPaymentSchedule,
-        createPayfastCheckout,
-        completePayfastPayment,
-        getCalendarState,
-        createBooking,
-        cancelBooking,
-        completeBooking,
-        myArtistProfile,
-        payoutBalances,
-        payouts,
-        verificationStatus,
-        loadArtistDashboard,
-        updateMyArtistProfile,
-        requestPayout,
-        submitArtistVerification
-      }}
-    >
-      {children}
-    </StageBookContext.Provider>
+  const value = useMemo(
+    () => ({
+      artists,
+      bookings,
+      chatMessages,
+      counterOffers,
+      notifications,
+      filters,
+      setFilters,
+      filteredArtists,
+      dataLoading,
+      dataError,
+      refreshBookings,
+      getArtist,
+      getBooking,
+      getBookingChat,
+      getMessageThreads,
+      getBookingContext,
+      getPendingCounterOffer,
+      getCounterOffer,
+      markThreadRead,
+      unreadMessageCount,
+      sendMessage,
+      sendCounterOffer,
+      acceptCounterOffer,
+      declineCounterOffer,
+      acceptOffer,
+      declineOffer,
+      refreshThread,
+      contracts,
+      getContract,
+      loadContract,
+      generateContract,
+      signContract,
+      requestAmendment,
+      getPaymentSchedule,
+      createPayfastCheckout,
+      completePayfastPayment,
+      getCalendarState,
+      createBooking,
+      cancelBooking,
+      completeBooking,
+      myArtistProfile,
+      payoutBalances,
+      payouts,
+      verificationStatus,
+      loadArtistDashboard,
+      updateMyArtistProfile,
+      requestPayout,
+      submitArtistVerification
+    }),
+    [
+      artists,
+      bookings,
+      chatMessages,
+      counterOffers,
+      notifications,
+      filters,
+      setFilters,
+      filteredArtists,
+      dataLoading,
+      dataError,
+      refreshBookings,
+      getArtist,
+      getBooking,
+      getBookingChat,
+      getMessageThreads,
+      getBookingContext,
+      getPendingCounterOffer,
+      getCounterOffer,
+      markThreadRead,
+      unreadMessageCount,
+      sendMessage,
+      sendCounterOffer,
+      acceptCounterOffer,
+      declineCounterOffer,
+      acceptOffer,
+      declineOffer,
+      refreshThread,
+      contracts,
+      getContract,
+      loadContract,
+      generateContract,
+      signContract,
+      requestAmendment,
+      getPaymentSchedule,
+      createPayfastCheckout,
+      completePayfastPayment,
+      getCalendarState,
+      createBooking,
+      cancelBooking,
+      completeBooking,
+      myArtistProfile,
+      payoutBalances,
+      payouts,
+      verificationStatus,
+      loadArtistDashboard,
+      updateMyArtistProfile,
+      requestPayout,
+      submitArtistVerification
+    ]
   );
+
+  return <StageBookContext.Provider value={value}>{children}</StageBookContext.Provider>;
 }
 
 export function useStageBook() {

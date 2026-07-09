@@ -449,7 +449,9 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
         if (session.user.role === "artist" || session.user.role === "representative") {
           const decision = await stagebookApi.bookingDecision(bookingId, {
             status: "agreement",
-            counterPriceZar: input.priceZar
+            counterPriceZar: input.priceZar,
+            counterStartTime: input.startTime,
+            counterEndTime: input.endTime
           });
           setBookings((prev) =>
             prev.map((entry) => (entry.id === bookingId ? decision.booking : entry))
@@ -487,13 +489,15 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
       try {
         const decision = await stagebookApi.bookingDecision(offer.bookingId, {
           status: "agreement",
-          counterPriceZar: offer.proposedPriceZar
+          counterPriceZar: offer.proposedPriceZar,
+          counterStartTime: offer.proposedStartTime,
+          counterEndTime: offer.proposedEndTime
         });
         setBookings((prev) =>
           prev.map((entry) => (entry.id === offer.bookingId ? decision.booking : entry))
         );
         const message = await stagebookApi.sendChat(offer.bookingId, {
-          body: `Counter-offer accepted at R${offer.proposedPriceZar.toLocaleString("en-ZA")}. Proceed to contract and deposit.`,
+          body: `Counter-offer accepted at R${offer.proposedPriceZar.toLocaleString("en-ZA")} · ${offer.proposedStartTime}–${offer.proposedEndTime}. Proceed to contract and deposit.`,
           systemAction: "accept"
         });
         setChatMessages((prev) => [...prev, message]);

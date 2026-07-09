@@ -137,11 +137,27 @@ export class BookingService {
     return booking;
   }
 
-  transitionStatus(id: string, status: BookingStatus, quotedPriceZar?: number) {
+  transitionStatus(
+    id: string,
+    status: BookingStatus,
+    updates?: { quotedPriceZar?: number; startTime?: string; endTime?: string }
+  ) {
     const booking = this.getById(id);
 
-    if (status === "agreement" && quotedPriceZar) {
-      booking.quotedPriceZar = quotedPriceZar;
+    if (status === "agreement" && updates) {
+      if (updates.quotedPriceZar) {
+        booking.quotedPriceZar = updates.quotedPriceZar;
+      }
+
+      const { startTime, endTime } = updates;
+      if (startTime || endTime) {
+        if (!startTime || !endTime) {
+          throw new AppError("Both start and end times are required", 400);
+        }
+        this.validateTimeslot(startTime, endTime);
+        booking.startTime = startTime;
+        booking.endTime = endTime;
+      }
     }
 
     booking.status = status;

@@ -1,7 +1,8 @@
 import { buildCalendarMonth } from "@stagebook/shared";
 import type { BookingRequest, CalendarSlotState } from "@stagebook/shared";
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { LuxuryCard } from "./LuxuryCard";
+import { FloatingSurface } from "./FloatingSurface";
 import { theme } from "../theme/theme";
 
 interface CalendarMonthProps {
@@ -18,17 +19,19 @@ const stateColors: Record<CalendarSlotState, string> = {
 };
 
 export function CalendarMonth({ artistId, bookings, getCalendarState }: CalendarMonthProps) {
-  const now = new Date();
-  const cells = buildCalendarMonth({
-    year: now.getFullYear(),
-    month: now.getMonth(),
-    artistId,
-    bookings,
-    getCalendarState
-  });
+  const cells = useMemo(() => {
+    const now = new Date();
+    return buildCalendarMonth({
+      year: now.getFullYear(),
+      month: now.getMonth(),
+      artistId,
+      bookings,
+      getCalendarState
+    });
+  }, [artistId, bookings, getCalendarState]);
 
   return (
-    <LuxuryCard>
+    <FloatingSurface>
       <Text style={styles.title}>Availability calendar</Text>
       <Text style={styles.muted}>Live slot states from confirmed bookings and locked deposits.</Text>
       <View style={styles.grid}>
@@ -44,20 +47,20 @@ export function CalendarMonth({ artistId, bookings, getCalendarState }: Calendar
           </View>
         ))}
       </View>
-    </LuxuryCard>
+    </FloatingSurface>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { color: theme.colors.textPrimary, fontWeight: "700", fontSize: 17 },
-  muted: { color: theme.colors.textMuted, fontSize: 13, marginTop: 4, marginBottom: 12 },
+  title: { ...theme.typography.overline, color: theme.colors.gold },
+  muted: { ...theme.typography.caption, color: theme.colors.textMuted, marginBottom: 12 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   cell: {
     width: "13%",
     aspectRatio: 1,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.borderFine,
     alignItems: "center",
     justifyContent: "center"
   },
