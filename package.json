@@ -6,6 +6,21 @@
     "apps/*",
     "packages/*"
   ],
+  "dependencies": {
+    "react-native-screens": "4.4.0"
+  },
+  "overrides": {
+    "react-native-screens": "4.4.0",
+    "expo-router": {
+      "react-native-screens": "4.4.0"
+    },
+    "@react-navigation/native-stack": {
+      "react-native-screens": "4.4.0"
+    },
+    "@react-navigation/bottom-tabs": {
+      "react-native-screens": "4.4.0"
+    }
+  },
   "scripts": {
     "dev:api": "npm run dev --workspace @stagebook/api",
     "dev:mobile": "npm run dev --workspace @stagebook/mobile",
