@@ -11,6 +11,8 @@ const MOBILE = path.join(ROOT, "apps/mobile");
 const API = process.env.API_BASE_URL ?? "http://localhost:4000";
 const METRO = process.env.METRO_BASE_URL ?? "http://localhost:8081";
 const SCREENSHOT_DIR = path.join(ROOT, "scripts/.smoke-screenshots");
+const EXPO_GO_BUNDLE_ID = "host.exp.Exponent";
+const EXPO_SDK_VERSION = "52.0.0";
 
 let passed = 0;
 let failed = 0;
@@ -50,12 +52,74 @@ function resolveSimctl() {
   return null;
 }
 
-function runSimctl(simctl, args) {
+function runSimctl(simctl, args, { allowFailure = false } = {}) {
   const bin = simctl === "xcrun simctl" ? "xcrun" : simctl;
   const fullArgs = simctl === "xcrun simctl" ? ["simctl", ...args] : args;
-  return execSync(`${bin} ${fullArgs.map((a) => JSON.stringify(a)).join(" ")}`, {
-    encoding: "utf8"
-  }).trim();
+  try {
+    return execSync(`${bin} ${fullArgs.map((a) => JSON.stringify(a)).join(" ")}`, {
+      encoding: "utf8"
+    }).trim();
+  } catch (error) {
+    if (allowFailure) return null;
+    throw error;
+  }
+}
+
+function isExpoGoInstalled(simctl, udid) {
+  const apps = runSimctl(simctl, ["listapps", udid], { allowFailure: true });
+  return Boolean(apps?.includes(EXPO_GO_BUNDLE_ID));
+}
+
+async function getExpoGoIosRelease() {
+  const response = await fetch("https://exp.host/--/api/v2/versions");
+  if (!response.ok) {
+    throw new Error(`Expo versions API returned ${response.status}`);
+  }
+  const data = await response.json();
+  const release = data.sdkVersions?.[EXPO_SDK_VERSION];
+  if (!release?.iosClientUrl || !release?.iosClientVersion) {
+    throw new Error(`No Expo Go release found for SDK ${EXPO_SDK_VERSION}`);
+  }
+  return {
+    url: release.iosClientUrl,
+    version: release.iosClientVersion
+  };
+}
+
+async function ensureExpoGo(simctl, device) {
+  if (isExpoGoInstalled(simctl, device.udid)) {
+    ok("Expo Go installed on simulator");
+    return;
+  }
+
+  console.log("  Installing Expo Go for SDK 52…");
+  const { url, version } = await getExpoGoIosRelease();
+  const cacheDir = path.join(process.env.HOME, ".expo", "ios-simulator-app-cache");
+  const appPath = path.join(cacheDir, `Expo-Go-${version}.app`);
+
+  if (!fs.existsSync(appPath)) {
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const tmpDir = fs.mkdtempSync(path.join(cacheDir, ".download-"));
+    const tarPath = path.join(tmpDir, "Expo-Go.tar.gz");
+    const archive = await fetch(url);
+    if (!archive.ok) {
+      throw new Error(`Failed to download Expo Go (${archive.status})`);
+    }
+    fs.writeFileSync(tarPath, Buffer.from(await archive.arrayBuffer()));
+    execSync(`tar -xzf ${JSON.stringify(tarPath)} -C ${JSON.stringify(tmpDir)}`);
+    fs.mkdirSync(appPath);
+    for (const entry of fs.readdirSync(tmpDir)) {
+      if (entry === "Expo-Go.tar.gz") continue;
+      fs.renameSync(path.join(tmpDir, entry), path.join(appPath, entry));
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+
+  runSimctl(simctl, ["install", device.udid, appPath]);
+  if (!isExpoGoInstalled(simctl, device.udid)) {
+    throw new Error("Expo Go install finished but app is not registered on simulator");
+  }
+  ok(`Expo Go ${version} installed`);
 }
 
 function pickIphoneDevice(simctl) {
@@ -63,7 +127,9 @@ function pickIphoneDevice(simctl) {
   const lines = listing.split("\n");
   const devices = [];
   for (const line of lines) {
-    const match = line.match(/^\s+(.+?) \(([A-F0-9-]+)\) \((Available|Booted)\)/i);
+    const match = line.match(
+      /^\s+(.+?) \(([A-F0-9-]+)\) \((Available|Booted|Shutdown)\)/i
+    );
     if (match && /iphone/i.test(match[1])) {
       devices.push({ name: match[1], udid: match[2], state: match[3] });
     }
@@ -126,7 +192,7 @@ async function verifyIosBundle() {
 }
 
 async function openInSimulator(simctl, device) {
-  if (device.state !== "Booted") {
+  if (device.state !== "Booted" && device.state !== "booted") {
     console.log(`  Booting ${device.name}…`);
     runSimctl(simctl, ["boot", device.udid]);
     ok(`Simulator booted — ${device.name}`);
@@ -140,12 +206,20 @@ async function openInSimulator(simctl, device) {
     // Simulator may already be visible.
   }
 
+  await ensureExpoGo(simctl, device);
+
   const expoUrl = `${METRO.replace("http://", "exp://")}`;
   console.log(`  Opening Expo Go URL: ${expoUrl}`);
-  runSimctl(simctl, ["openurl", device.udid, expoUrl]);
-  ok("Launched StageBook in iOS Simulator via Expo Go");
+  try {
+    runSimctl(simctl, ["openurl", device.udid, expoUrl]);
+    ok("Launched StageBook in iOS Simulator via Expo Go");
+  } catch (error) {
+    const detail = error.stderr?.trim() || error.message;
+    fail("Open Expo Go URL", detail);
+    return;
+  }
 
-  await sleep(8000);
+  await sleep(12000);
 
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
   const screenshotPath = path.join(SCREENSHOT_DIR, `ios-smoke-${Date.now()}.png`);
