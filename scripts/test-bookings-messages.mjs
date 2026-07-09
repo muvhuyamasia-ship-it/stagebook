@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { uniqueBookingSlot } from "./test-helpers.mjs";
+import { restartApi, uniqueBookingSlot } from "./test-helpers.mjs";
 
 const API = process.env.API_BASE_URL ?? "http://localhost:4000";
 const WEB = process.env.WEB_BASE_URL ?? "http://localhost:5174";
@@ -190,6 +190,8 @@ async function testMobileBundle(slot) {
 async function main() {
   console.log("StageBook bookings & messages E2E test");
   console.log(`API: ${API}  Web: ${WEB}  Mobile API: ${MOBILE_API}`);
+
+  await restartApi(API);
 
   await runFlow("Direct API", API, uniqueBookingSlot(10));
   await runFlow("Web proxy", WEB, uniqueBookingSlot(20));

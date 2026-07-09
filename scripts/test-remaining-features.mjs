@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { uniqueBookingSlot } from "./test-helpers.mjs";
+import { restartApi, uniqueBookingSlot } from "./test-helpers.mjs";
 
 const API = process.env.API_BASE_URL ?? "http://localhost:4000";
 const WEB = process.env.WEB_BASE_URL ?? "http://localhost:5174";
@@ -259,6 +259,8 @@ async function testWebRoutes() {
 async function main() {
   console.log("StageBook remaining features — artist profile, calendar, payouts, complete");
   console.log(`API: ${API}  Web: ${WEB}`);
+
+  await restartApi(API);
 
   const artistId = await runArtistDashboardFlow("Direct API", API);
   if (artistId) await runCompleteBookingFlow("Direct API", API, artistId, 70);

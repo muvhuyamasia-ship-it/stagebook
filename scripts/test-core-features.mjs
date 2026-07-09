@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { uniqueBookingSlot } from "./test-helpers.mjs";
+import { restartApi, uniqueBookingSlot } from "./test-helpers.mjs";
 
 const API = process.env.API_BASE_URL ?? "http://localhost:4000";
 const WEB = process.env.WEB_BASE_URL ?? "http://localhost:5174";
@@ -251,6 +251,8 @@ async function testWebPages() {
 async function main() {
   console.log("StageBook core features E2E — messages, contracts, PayFast");
   console.log(`API: ${API}  Web: ${WEB}`);
+
+  await restartApi(API);
 
   await runCoreFlow("Direct API", API, uniqueBookingSlot(40));
   await runCoreFlow("Web proxy", WEB, uniqueBookingSlot(50));

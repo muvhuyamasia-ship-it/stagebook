@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { uniqueBookingSlot } from "./test-helpers.mjs";
+import { restartApi, uniqueBookingSlot } from "./test-helpers.mjs";
 
 const API = process.env.MOBILE_API_BASE_URL ?? process.env.API_BASE_URL ?? "http://localhost:4000";
 const METRO = process.env.METRO_BASE_URL ?? "http://localhost:8081";
@@ -170,6 +170,8 @@ async function smokeBookingFlow() {
 async function main() {
   console.log("StageBook mobile booking flow smoke test");
   console.log(`Metro: ${METRO}  API: ${API}`);
+
+  await restartApi(API);
 
   await smokeMetro();
   await smokeBookingFlow();
