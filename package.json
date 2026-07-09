@@ -32,6 +32,7 @@
     "test": "npm run test --workspace @stagebook/api",
     "test:web": "npm run test --workspace @stagebook/web",
     "test:all": "node scripts/run-all-tests.mjs",
+    "smoke:ios": "node scripts/smoke-test-ios-simulator.mjs",
     "typecheck": "npm run typecheck --workspace @stagebook/api && npm run typecheck --workspace @stagebook/mobile && npm run typecheck --workspace @stagebook/web && npm run typecheck --workspace @stagebook/stagebook-web"
   }
 }
