@@ -19,6 +19,7 @@ import { EarningsPage } from "./pages/app/EarningsPage";
 import { MessagesPage } from "./pages/app/MessagesPage";
 import { NotificationsPage } from "./pages/app/NotificationsPage";
 import { PaymentPage } from "./pages/app/PaymentPage";
+import { ArtistEditorPage } from "./pages/app/ArtistEditorPage";
 import { ProfilePage } from "./pages/app/ProfilePage";
 import { SearchPage } from "./pages/app/SearchPage";
 
@@ -40,6 +41,7 @@ function VerifiedApp() {
           <Route path="messages/:bookingId" element={<MessagesPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="profile/edit" element={<ArtistEditorPage />} />
           <Route path="earnings" element={<EarningsPage />} />
           <Route path="artists/:artistId" element={<ArtistProfilePage />} />
         </Route>

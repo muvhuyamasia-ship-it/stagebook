@@ -1,14 +1,18 @@
 import { Link } from "react-router-dom";
 import { BOOKING_STATUS_LABEL, formatZar } from "@stagebook/shared";
+import { CalendarMonth } from "../../components/bookings/CalendarMonth";
 import { useStageBook } from "../../context/StageBookContext";
 import { useAuth } from "../../context/AuthContext";
 import { LuxuryCard } from "../../components/ui/LuxuryCard";
 import { Button } from "../../components/ui/Button";
 
 export function BookingsPage() {
-  const { bookings, getArtist } = useStageBook();
+  const { bookings, getArtist, getCalendarState, myArtistProfile } = useStageBook();
   const { session } = useAuth();
   const role = session?.user.role ?? "client";
+  const calendarArtistId =
+    myArtistProfile?.id ??
+    (role === "representative" ? bookings.find((b) => b.status !== "cancelled")?.artistProfileId : undefined);
 
   const inbox =
     role === "artist" || role === "representative"
@@ -68,6 +72,14 @@ export function BookingsPage() {
         <span className="legend-dot legend-dot--booked" /> Fully booked
         <span className="legend-dot legend-dot--past" /> Past dates
       </div>
+
+      {calendarArtistId ? (
+        <CalendarMonth
+          artistId={calendarArtistId}
+          bookings={bookings}
+          getCalendarState={getCalendarState}
+        />
+      ) : null}
 
       {schedule.map((booking) => {
         const artist = getArtist(booking.artistProfileId);

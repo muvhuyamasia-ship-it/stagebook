@@ -1846,6 +1846,56 @@ ol {
   background: var(--sb-disabled);
 }
 
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.calendar-cell {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 1px solid var(--sb-border);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 12px;
+  position: relative;
+}
+
+.calendar-cell__day {
+  font-weight: 600;
+}
+
+.calendar-cell__count {
+  font-size: 10px;
+  color: var(--sb-text-muted);
+}
+
+.calendar-cell--available {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.calendar-cell--partial {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.calendar-cell--booked {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.calendar-cell--past {
+  opacity: 0.45;
+  background: rgba(55, 65, 81, 0.2);
+}
+
 .wizard-steps,
 .slot-grid {
   display: flex;

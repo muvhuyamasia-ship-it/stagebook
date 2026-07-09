@@ -4,9 +4,12 @@ import type {
   BookingStatus,
   ChatMessage,
   ContractRecord,
+  IdentityVerificationRecord,
   PaymentSchedule,
   PayfastCheckoutSession,
   PayfastPaymentPhase,
+  PayoutBalances,
+  PayoutRequest,
   SignatureMethod
 } from "./index";
 
@@ -166,7 +169,53 @@ export function createStagebookApi(config: StagebookApiConfig) {
           method: "POST",
           body: JSON.stringify({ phase })
         }
-      )
+      ),
+
+    getMyArtistProfile: () => request<ArtistProfile>("/api/artists/me"),
+
+    updateArtistProfile: (input: Partial<ArtistProfile>) =>
+      request<ArtistProfile>("/api/artists/me", {
+        method: "PUT",
+        body: JSON.stringify(input)
+      }),
+
+    getVerification: (artistProfileId: string) =>
+      request<IdentityVerificationRecord>(`/api/artists/${artistProfileId}/verification`),
+
+    submitVerification: (
+      artistProfileId: string,
+      input: {
+        southAfricanIdNumber: string;
+        idDocumentUrl: string;
+        faceScanUrl: string;
+      }
+    ) =>
+      request<IdentityVerificationRecord>(`/api/artists/${artistProfileId}/verification`, {
+        method: "POST",
+        body: JSON.stringify(input)
+      }),
+
+    approveVerification: (artistProfileId: string) =>
+      request<IdentityVerificationRecord>(`/api/artists/${artistProfileId}/verification/approve`, {
+        method: "POST"
+      }),
+
+    getPayoutBalances: (artistProfileId: string) =>
+      request<PayoutBalances>(`/api/artists/${artistProfileId}/payouts/balances`),
+
+    listPayouts: (artistProfileId: string) =>
+      request<PayoutRequest[]>(`/api/artists/${artistProfileId}/payouts`),
+
+    requestPayout: (artistProfileId: string, amountZar: number) =>
+      request<PayoutRequest>(`/api/artists/${artistProfileId}/payouts/request`, {
+        method: "POST",
+        body: JSON.stringify({ amountZar })
+      }),
+
+    completeBooking: (bookingId: string) =>
+      request<{ booking: BookingRequest }>(`/api/bookings/${bookingId}/complete`, {
+        method: "POST"
+      })
   };
 }
 

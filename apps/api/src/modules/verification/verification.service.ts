@@ -23,6 +23,14 @@ export class VerificationService {
     return verification;
   }
 
+  getByArtistId(artistProfileId: string) {
+    const verification = store.verifications.find((entry) => entry.artistProfileId === artistProfileId);
+    if (!verification) {
+      throw new AppError("Verification request not found", 404);
+    }
+    return verification;
+  }
+
   markVerified(artistProfileId: string) {
     const verification = store.verifications.find((entry) => entry.artistProfileId === artistProfileId);
     if (!verification) {

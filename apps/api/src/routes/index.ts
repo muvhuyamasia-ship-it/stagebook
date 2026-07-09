@@ -130,12 +130,16 @@ apiRouter.get("/artists", (req, res) => {
   }));
 });
 
-apiRouter.get("/artists/:artistId", (req, res) => {
-  res.json(artistService.getById(req.params.artistId));
+apiRouter.get("/artists/me", requireAuth, requireRole(["artist"]), (req: AuthenticatedRequest, res) => {
+  res.json(artistService.getByUserId(req.auth!.userId));
 });
 
 apiRouter.put("/artists/me", requireAuth, requireRole(["artist"]), (req: AuthenticatedRequest, res) => {
   res.json(artistService.createOrUpdate(req.auth!.userId, req.body));
+});
+
+apiRouter.get("/artists/:artistId", (req, res) => {
+  res.json(artistService.getById(req.params.artistId));
 });
 
 apiRouter.get("/bookings/me", requireAuth, (req: AuthenticatedRequest, res) => {
@@ -263,6 +267,11 @@ apiRouter.get("/payments/payfast/cancel", (_req, res) => {
   res.type("html").send("<html><body style='font-family:sans-serif;background:#0B0B0B;color:#fff;padding:2rem'><h1>PayFast sandbox cancelled</h1><p>No funds were captured.</p></body></html>");
 });
 
+apiRouter.get("/artists/:artistId/verification", requireAuth, requireRole(["artist"]), (req: AuthenticatedRequest, res) => {
+  assertOwnedArtist(req, req.params.artistId);
+  res.json(verificationService.getByArtistId(req.params.artistId));
+});
+
 apiRouter.post("/artists/:artistId/verification", requireAuth, requireRole(["artist"]), (req: AuthenticatedRequest, res) => {
   assertOwnedArtist(req, req.params.artistId);
   res.status(201).json(verificationService.submit({
@@ -279,9 +288,20 @@ apiRouter.post("/artists/:artistId/verification/approve", requireAuth, requireRo
   res.json(verificationService.markVerified(req.params.artistId));
 });
 
+apiRouter.post("/bookings/:bookingId/complete", requireAuth, requireRole(["artist", "representative"]), (req: AuthenticatedRequest, res) => {
+  assertBookingManager(req, req.params.bookingId);
+  const result = bookingService.transitionStatus(req.params.bookingId, "completed");
+  res.json(result);
+});
+
 apiRouter.get("/artists/:artistId/payouts/balances", requireAuth, requireRole(["artist"]), (req: AuthenticatedRequest, res) => {
   assertOwnedArtist(req, req.params.artistId);
   res.json(payoutService.getBalances(req.params.artistId));
+});
+
+apiRouter.get("/artists/:artistId/payouts", requireAuth, requireRole(["artist"]), (req: AuthenticatedRequest, res) => {
+  assertOwnedArtist(req, req.params.artistId);
+  res.json(payoutService.listForArtist(req.params.artistId));
 });
 
 apiRouter.post("/artists/:artistId/payouts/request", requireAuth, requireRole(["artist"]), (req: AuthenticatedRequest, res) => {

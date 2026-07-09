@@ -1,13 +1,16 @@
 import { Link } from "react-router-dom";
 import { ROLE_LABEL } from "@stagebook/shared";
 import { useAuth } from "../../context/AuthContext";
+import { useStageBook } from "../../context/StageBookContext";
 import { loadOnboarding } from "../../lib/onboarding";
 import { LuxuryCard } from "../../components/ui/LuxuryCard";
 import { Button } from "../../components/ui/Button";
 
 export function ProfilePage() {
   const { session, isVerified } = useAuth();
+  const { myArtistProfile, verificationStatus } = useStageBook();
   const onboarding = session ? loadOnboarding(session.user.id) : null;
+  const role = session?.user.role;
 
   return (
     <div className="page-stack">
@@ -34,6 +37,21 @@ export function ProfilePage() {
           <Button as="link" to="/onboarding" variant="primary">
             Complete verification
           </Button>
+        ) : null}
+        {role === "artist" ? (
+          <div className="cta-row">
+            <Button as="link" to="/app/profile/edit" variant="primary">
+              Edit artist profile
+            </Button>
+            <Button as="link" to="/app/earnings" variant="outline">
+              Earnings & payouts
+            </Button>
+          </div>
+        ) : null}
+        {role === "artist" && myArtistProfile ? (
+          <p className="text-muted">
+            Stage identity: {myArtistProfile.stageName} · API verification: {verificationStatus ?? "unverified"}
+          </p>
         ) : null}
       </LuxuryCard>
 

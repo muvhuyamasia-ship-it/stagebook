@@ -146,6 +146,11 @@ export interface PayoutRequest {
   status: "pending" | "processing" | "paid" | "rejected";
 }
 
+export interface PayoutBalances {
+  availableBalanceZar: number;
+  pendingBalanceZar: number;
+}
+
 export type SubsidiaryStatus = "live" | "in_development";
 export type ReplyChannel = "email" | "chat" | "both";
 export type ThreadStatus = "open" | "responded" | "closed";
@@ -255,3 +260,4 @@ export * from "./mock-catalog";
 export * from "./messaging";
 export * from "./stagebook-api";
 export * from "./payfast";
+export * from "./calendar";

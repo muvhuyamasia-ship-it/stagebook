@@ -42,6 +42,10 @@ export class PayoutService {
     store.payouts.push(payout);
     return payout;
   }
+
+  listForArtist(artistProfileId: string) {
+    return store.payouts.filter((entry) => entry.artistProfileId === artistProfileId);
+  }
 }
 
 export const payoutService = new PayoutService();

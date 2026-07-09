@@ -2,6 +2,9 @@ import {
   StagebookApiError,
   type PayfastCheckoutSession,
   type PayfastPaymentPhase,
+  type PayoutBalances,
+  type PayoutRequest,
+  type IdentityVerificationStatus,
   assessTravelGap,
   buildBookingContext,
   buildMessageThreads,
@@ -99,6 +102,15 @@ interface StageBookContextValue {
   ) => Promise<PayfastCheckoutSession | null>;
   completePayfastPayment: (bookingId: string, phase: PayfastPaymentPhase) => Promise<void>;
   refreshThread: (bookingId: string) => Promise<void>;
+  myArtistProfile: ArtistProfile | null;
+  payoutBalances: PayoutBalances | null;
+  payouts: PayoutRequest[];
+  verificationStatus: IdentityVerificationStatus | null;
+  loadArtistDashboard: () => Promise<void>;
+  updateMyArtistProfile: (patch: Partial<ArtistProfile>) => Promise<void>;
+  requestPayout: (amountZar: number) => Promise<void>;
+  submitArtistVerification: () => Promise<void>;
+  completeBooking: (bookingId: string) => Promise<void>;
   cancelBooking: (bookingId: string) => void;
   markNotificationRead: (id: string) => void;
   unreadCount: number;
@@ -142,6 +154,10 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
     }
   ]);
   const [filters, setFiltersState] = useState<DiscoveryFilters>(DEFAULT_DISCOVERY_FILTERS);
+  const [myArtistProfile, setMyArtistProfile] = useState<ArtistProfile | null>(null);
+  const [payoutBalances, setPayoutBalances] = useState<PayoutBalances | null>(null);
+  const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
+  const [verificationStatus, setVerificationStatus] = useState<IdentityVerificationStatus | null>(null);
 
   const counterOffers = useMemo(() => deriveCounterOffersFromChat(chatMessages), [chatMessages]);
 
@@ -709,6 +725,140 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
     [session, refreshThread]
   );
 
+  const loadArtistDashboard = useCallback(async () => {
+    if (!session || session.user.role !== "artist") {
+      setMyArtistProfile(null);
+      setPayoutBalances(null);
+      setPayouts([]);
+      setVerificationStatus(null);
+      return;
+    }
+
+    try {
+      const profile = await stagebookApi.getMyArtistProfile();
+      setMyArtistProfile(profile);
+      setArtists((prev) => [...prev.filter((a) => a.id !== profile.id), profile]);
+      const [balances, payoutList] = await Promise.all([
+        stagebookApi.getPayoutBalances(profile.id),
+        stagebookApi.listPayouts(profile.id)
+      ]);
+      setPayoutBalances(balances);
+      setPayouts(payoutList);
+      try {
+        const verification = await stagebookApi.getVerification(profile.id);
+        setVerificationStatus(verification.status);
+      } catch {
+        setVerificationStatus("unverified");
+      }
+    } catch (error) {
+      const message =
+        error instanceof StagebookApiError ? error.message : "Unable to load artist dashboard";
+      setDataError(message);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    void loadArtistDashboard();
+  }, [loadArtistDashboard]);
+
+  const updateMyArtistProfile = useCallback(
+    async (patch: Partial<ArtistProfile>) => {
+      if (!session || session.user.role !== "artist") return;
+      try {
+        const profile = await stagebookApi.updateArtistProfile(patch);
+        setMyArtistProfile(profile);
+        setArtists((prev) => prev.map((a) => (a.id === profile.id ? profile : a)));
+        setNotifications((prev) =>
+          pushNotification(prev, {
+            type: "booking_request",
+            title: "Profile updated",
+            body: "Your artist profile has been saved."
+          })
+        );
+      } catch (error) {
+        const message =
+          error instanceof StagebookApiError ? error.message : "Unable to update profile";
+        setDataError(message);
+      }
+    },
+    [session]
+  );
+
+  const requestPayout = useCallback(
+    async (amountZar: number) => {
+      if (!myArtistProfile) return;
+      try {
+        const payout = await stagebookApi.requestPayout(myArtistProfile.id, amountZar);
+        setPayouts((prev) => [payout, ...prev]);
+        const balances = await stagebookApi.getPayoutBalances(myArtistProfile.id);
+        setPayoutBalances(balances);
+        setNotifications((prev) =>
+          pushNotification(prev, {
+            type: "payout_approved",
+            title: "Payout requested",
+            body: `R${amountZar.toLocaleString("en-ZA")} queued for transfer.`
+          })
+        );
+      } catch (error) {
+        const message =
+          error instanceof StagebookApiError ? error.message : "Unable to request payout";
+        setDataError(message);
+      }
+    },
+    [myArtistProfile]
+  );
+
+  const submitArtistVerification = useCallback(async () => {
+    if (!myArtistProfile) return;
+    try {
+      const record = await stagebookApi.submitVerification(myArtistProfile.id, {
+        southAfricanIdNumber: "9001015800084",
+        idDocumentUrl: "https://docs.stagebook.local/id-scan.pdf",
+        faceScanUrl: "https://docs.stagebook.local/face-scan.jpg"
+      });
+      setVerificationStatus(record.status);
+      const approved = await stagebookApi.approveVerification(myArtistProfile.id);
+      setVerificationStatus(approved.status);
+      setNotifications((prev) =>
+        pushNotification(prev, {
+          type: "booking_request",
+          title: "Verification submitted",
+          body: "Identity verification approved for demo sandbox."
+        })
+      );
+    } catch (error) {
+      const message =
+        error instanceof StagebookApiError ? error.message : "Unable to submit verification";
+      setDataError(message);
+    }
+  }, [myArtistProfile]);
+
+  const completeBooking = useCallback(
+    async (bookingId: string) => {
+      if (!session) return;
+      try {
+        const result = await stagebookApi.completeBooking(bookingId);
+        setBookings((prev) =>
+          prev.map((entry) => (entry.id === bookingId ? result.booking : entry))
+        );
+        setNotifications((prev) =>
+          pushNotification(prev, {
+            type: "booking_request",
+            title: "Engagement completed",
+            body: "Booking marked complete. Earnings moved to available balance.",
+            bookingId
+          })
+        );
+        void loadArtistDashboard();
+      } catch (error) {
+        const message =
+          error instanceof StagebookApiError ? error.message : "Unable to complete booking";
+        setDataError(message);
+      }
+    },
+    [session, loadArtistDashboard]
+  );
+
   const cancelBooking = useCallback(
     async (bookingId: string) => {
       const booking = bookings.find((b) => b.id === bookingId);
@@ -784,6 +934,15 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
       createPayfastCheckout,
       completePayfastPayment,
       refreshThread,
+      myArtistProfile,
+      payoutBalances,
+      payouts,
+      verificationStatus,
+      loadArtistDashboard,
+      updateMyArtistProfile,
+      requestPayout,
+      submitArtistVerification,
+      completeBooking,
       cancelBooking,
       markNotificationRead,
       unreadCount
@@ -828,6 +987,15 @@ export function StageBookProvider({ children }: { children: ReactNode }) {
       createPayfastCheckout,
       completePayfastPayment,
       refreshThread,
+      myArtistProfile,
+      payoutBalances,
+      payouts,
+      verificationStatus,
+      loadArtistDashboard,
+      updateMyArtistProfile,
+      requestPayout,
+      submitArtistVerification,
+      completeBooking,
       cancelBooking,
       markNotificationRead,
       unreadCount

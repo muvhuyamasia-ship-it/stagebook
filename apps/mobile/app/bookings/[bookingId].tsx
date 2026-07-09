@@ -2,12 +2,15 @@ import { Link, useLocalSearchParams } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import { BOOKING_STATUS_LABEL, formatZar } from "@stagebook/shared";
 import { LuxuryCard } from "../../src/components/LuxuryCard";
+import { useAuth } from "../../src/context/AuthContext";
 import { useStageBook } from "../../src/context/StageBookContext";
 import { theme } from "../../src/theme/theme";
 
 export default function BookingDetailScreen() {
   const { bookingId = "" } = useLocalSearchParams<{ bookingId: string }>();
-  const { getBooking, getArtist } = useStageBook();
+  const { getBooking, getArtist, acceptOffer, declineOffer, completeBooking } = useStageBook();
+  const { session } = useAuth();
+  const role = session?.user.role;
   const booking = getBooking(bookingId);
   const artist = booking ? getArtist(booking.artistProfileId) : undefined;
 
@@ -34,6 +37,31 @@ export default function BookingDetailScreen() {
         <Text style={styles.gold}>{formatZar(booking.quotedPriceZar)}</Text>
         <Text style={styles.status}>{BOOKING_STATUS_LABEL[booking.status]}</Text>
       </LuxuryCard>
+      {(role === "artist" || role === "representative") && booking.status === "request_sent" ? (
+        <LuxuryCard>
+          <Text style={styles.section}>Decision</Text>
+          <Pressable style={styles.btn} onPress={() => void acceptOffer(booking.id)}>
+            <Text style={styles.btnText}>Accept offer</Text>
+          </Pressable>
+          <Pressable style={styles.btnOutline} onPress={() => void declineOffer(booking.id)}>
+            <Text style={styles.btnOutlineText}>Decline request</Text>
+          </Pressable>
+        </LuxuryCard>
+      ) : null}
+
+      {(role === "artist" || role === "representative") &&
+      ["paid", "confirmed"].includes(booking.status) ? (
+        <LuxuryCard>
+          <Text style={styles.section}>Post-event</Text>
+          <Text style={styles.muted}>
+            Mark complete after the event to release earnings to your available balance.
+          </Text>
+          <Pressable style={styles.btn} onPress={() => void completeBooking(booking.id)}>
+            <Text style={styles.btnText}>Mark engagement complete</Text>
+          </Pressable>
+        </LuxuryCard>
+      ) : null}
+
       <LuxuryCard>
         <Text style={styles.muted}>Venue: {booking.locationLabel}</Text>
         <Text style={styles.muted}>
@@ -64,6 +92,7 @@ const styles = StyleSheet.create({
   content: { padding: 20, gap: 12, paddingTop: 56 },
   back: { color: theme.colors.gold, marginBottom: 8 },
   title: { color: theme.colors.textPrimary, fontSize: 24, fontWeight: "700" },
+  section: { color: theme.colors.textPrimary, fontWeight: "700", fontSize: 17, marginBottom: 8 },
   muted: { color: theme.colors.textMuted, marginTop: 4 },
   gold: { color: theme.colors.gold, fontWeight: "700", fontSize: 18, marginTop: 6 },
   status: { color: theme.colors.warning, fontWeight: "700", marginTop: 6 },

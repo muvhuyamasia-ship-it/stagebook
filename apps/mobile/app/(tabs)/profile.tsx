@@ -1,11 +1,14 @@
 import { Link } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import { useAuth } from "../../src/context/AuthContext";
+import { useStageBook } from "../../src/context/StageBookContext";
 import { LuxuryCard } from "../../src/components/LuxuryCard";
 import { theme } from "../../src/theme/theme";
 
 export default function ProfileScreen() {
   const { session, logout } = useAuth();
+  const { myArtistProfile, verificationStatus } = useStageBook();
+  const role = session?.user.role;
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
@@ -29,6 +32,28 @@ export default function ProfileScreen() {
           </>
         )}
       </LuxuryCard>
+
+      {role === "artist" ? (
+        <LuxuryCard>
+          <Text style={styles.label}>Artist dashboard</Text>
+          {myArtistProfile ? (
+            <Text style={styles.muted}>
+              {myArtistProfile.stageName} · Verification: {verificationStatus ?? "unverified"}
+            </Text>
+          ) : null}
+          <Link href="/profile/edit" asChild>
+            <Pressable style={styles.btnOutline}>
+              <Text style={styles.btnOutlineText}>Edit artist profile</Text>
+            </Pressable>
+          </Link>
+          <Link href="/(tabs)/earnings" asChild>
+            <Pressable style={styles.btnOutline}>
+              <Text style={styles.btnOutlineText}>Earnings & payouts</Text>
+            </Pressable>
+          </Link>
+        </LuxuryCard>
+      ) : null}
+
       <LuxuryCard>
         <Text style={styles.label}>Onboarding status</Text>
         <Text style={styles.value}>Verified (demo)</Text>
@@ -57,5 +82,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     alignSelf: "flex-start"
   },
-  btnText: { color: "#1a1408", fontWeight: "700" }
+  btnText: { color: "#1a1408", fontWeight: "700" },
+  btnOutline: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGold,
+    borderRadius: 999,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignSelf: "flex-start"
+  },
+  btnOutlineText: { color: theme.colors.gold, fontWeight: "600" }
 });

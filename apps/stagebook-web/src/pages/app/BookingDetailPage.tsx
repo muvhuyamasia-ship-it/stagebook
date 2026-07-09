@@ -7,7 +7,7 @@ import { Button } from "../../components/ui/Button";
 
 export function BookingDetailPage() {
   const { bookingId = "" } = useParams();
-  const { getBooking, getArtist, acceptOffer, declineOffer, cancelBooking } = useStageBook();
+  const { getBooking, getArtist, acceptOffer, declineOffer, cancelBooking, completeBooking } = useStageBook();
   const { session } = useAuth();
   const booking = getBooking(bookingId);
   const artist = booking ? getArtist(booking.artistProfileId) : undefined;
@@ -37,6 +37,19 @@ export function BookingDetailPage() {
         </LuxuryCard>
       ) : null}
 
+      {(role === "artist" || role === "representative") &&
+      ["paid", "confirmed"].includes(booking.status) ? (
+        <LuxuryCard>
+          <h2>Post-event</h2>
+          <p className="page-copy">
+            Mark this engagement complete after the event to release earnings to your available balance.
+          </p>
+          <Button variant="primary" onClick={() => completeBooking(booking.id)}>
+            Mark engagement complete
+          </Button>
+        </LuxuryCard>
+      ) : null}
+
       <LuxuryCard>
         <h2>Event parameters</h2>
         <ul className="bullet-list">
@@ -49,7 +62,9 @@ export function BookingDetailPage() {
           <Button as="link" to={`/app/bookings/${booking.id}/chat`} variant="secondary">Messages</Button>
           <Button as="link" to={`/app/bookings/${booking.id}/contract`} variant="outline">Contract</Button>
           <Button as="link" to={`/app/bookings/${booking.id}/payment`} variant="primary">Payment</Button>
-          <Button variant="ghost" onClick={() => cancelBooking(booking.id)}>Cancel booking</Button>
+          {booking.status !== "completed" ? (
+            <Button variant="ghost" onClick={() => cancelBooking(booking.id)}>Cancel booking</Button>
+          ) : null}
         </div>
       </LuxuryCard>
     </div>

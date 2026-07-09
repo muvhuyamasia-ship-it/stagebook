@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Link } from "expo-router";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { AVAILABILITY_LABEL, formatZar } from "@stagebook/shared";
 import { LuxuryCard } from "../../src/components/LuxuryCard";
 import { useStageBook } from "../../src/context/StageBookContext";
@@ -20,17 +21,21 @@ export default function DiscoverScreen() {
         />
       </LuxuryCard>
       {filteredArtists.map((artist) => (
-        <LuxuryCard key={artist.id}>
-          <View style={styles.row}>
-            <View style={styles.avatar} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{artist.stageName}</Text>
-              <Text style={styles.muted}>{artist.city}</Text>
-            </View>
-            <Text style={styles.status}>{AVAILABILITY_LABEL[artist.availabilityStatus]}</Text>
-          </View>
-          <Text style={styles.gold}>⭐ {artist.rating} · From {formatZar(artist.basePriceZar)}</Text>
-        </LuxuryCard>
+        <Link key={artist.id} href={`/artists/${artist.id}`} asChild>
+          <Pressable>
+            <LuxuryCard>
+              <View style={styles.row}>
+                <View style={styles.avatar} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name}>{artist.stageName}</Text>
+                  <Text style={styles.muted}>{artist.city}</Text>
+                </View>
+                <Text style={styles.status}>{AVAILABILITY_LABEL[artist.availabilityStatus]}</Text>
+              </View>
+              <Text style={styles.gold}>⭐ {artist.rating} · From {formatZar(artist.basePriceZar)}</Text>
+            </LuxuryCard>
+          </Pressable>
+        </Link>
       ))}
     </ScrollView>
   );
